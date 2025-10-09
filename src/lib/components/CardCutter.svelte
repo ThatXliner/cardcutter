@@ -78,42 +78,10 @@
 	function applyHighlight(level: number) {
 		if (!selectedText || selectionStart === selectionEnd) return;
 
-		// Rebuild segments with the new highlight
-		const newSegments: TextSegment[] = [];
-		let currentIndex = 0;
-
-		// Add text before selection
-		if (selectionStart > 0) {
-			newSegments.push({
-				text: sourceText.substring(0, selectionStart),
-				highlightLevel: null
-			});
-		}
-
-		// Add highlighted text
-		newSegments.push({
-			text: selectedText,
-			highlightLevel: level
-		});
-
-		// Add text after selection
-		if (selectionEnd < sourceText.length) {
-			newSegments.push({
-				text: sourceText.substring(selectionEnd),
-				highlightLevel: null
-			});
-		}
-
-		// Merge with existing segments
-		textSegments = mergeSegments(newSegments);
-	}
-
-	function mergeSegments(newSegments: TextSegment[]): TextSegment[] {
-		// For simplicity, we'll track highlights in a map by character position
-		// This allows overlapping highlights (last one wins)
+		// Build a highlight map from character position to highlight level
 		const highlightMap = new Map<number, number | null>();
 
-		// First, apply existing segments
+		// First, populate with existing highlights
 		let pos = 0;
 		for (const segment of textSegments) {
 			for (let i = 0; i < segment.text.length; i++) {
@@ -122,16 +90,12 @@
 			pos += segment.text.length;
 		}
 
-		// Then apply new segments (overwriting)
-		pos = 0;
-		for (const segment of newSegments) {
-			for (let i = 0; i < segment.text.length; i++) {
-				highlightMap.set(pos + i, segment.highlightLevel);
-			}
-			pos += segment.text.length;
+		// Apply the new highlight to selected positions (this overwrites existing highlights for these positions)
+		for (let i = selectionStart; i < selectionEnd; i++) {
+			highlightMap.set(i, level);
 		}
 
-		// Convert back to segments
+		// Convert the map back to segments
 		const result: TextSegment[] = [];
 		let currentSegment: TextSegment | null = null;
 
@@ -153,7 +117,7 @@
 			result.push(currentSegment);
 		}
 
-		return result;
+		textSegments = result;
 	}
 
 	function clearHighlights() {
