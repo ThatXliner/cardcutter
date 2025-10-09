@@ -125,8 +125,17 @@
 	}
 
 	function generateCitationHtml(): string {
-		const { firstName, lastName, qualifications, date, articleTitle, source, url, dateOfAccess, code } =
-			citation;
+		const {
+			firstName,
+			lastName,
+			qualifications,
+			date,
+			articleTitle,
+			source,
+			url,
+			dateOfAccess,
+			code
+		} = citation;
 
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 12pt;">';
 
@@ -248,7 +257,8 @@
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<div>
-				<label class="mb-1 block font-semibold">First Name</label>
+				<label class="mb-1 block font-semibold">First Name<span class="text-red-500">*</span></label
+				>
 				<input
 					type="text"
 					bind:value={citation.firstName}
@@ -330,7 +340,7 @@
 	</div>
 
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
-		<h2 class="mb-4 text-xl font-bold">Evidence Text</h2>
+		<h2 class="mb-4 text-xl font-bold">Evidence Text<span class="text-red-500">*</span></h2>
 
 		<textarea
 			bind:value={sourceText}
@@ -380,7 +390,7 @@
 			<button
 				onclick={handleCopy}
 				class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
-				disabled={!sourceText || !citation.lastName}
+				disabled={!sourceText || !citation.firstName}
 			>
 				{copySuccess ? 'Copied!' : 'Copy to Clipboard'}
 			</button>
