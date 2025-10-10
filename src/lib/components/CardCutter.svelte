@@ -1,13 +1,17 @@
 <script lang="ts">
 	import type { CitationData, TextSegment } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
+	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
 	import { copyRichText } from '$lib/utils/clipboard';
+	import { toast } from 'svelte-sonner';
+	import { Sparkles } from 'lucide-svelte';
 
 	let url = $state('');
 	let sourceText = $state('');
 	let isExtracting = $state(false);
 	let copySuccess = $state(false);
+	let metadataWasAIExtracted = $state(false);
 
 	let citation = $state<CitationData>({
 		firstName: '',
@@ -35,9 +39,10 @@
 
 		isExtracting = true;
 		citation.url = url;
+		metadataWasAIExtracted = false;
 
 		try {
-			const metadata = await extractMetadata(url);
+			const metadata = await extractMetadata(url, aiConfig.config);
 
 			if (metadata.title) {
 				citation.articleTitle = metadata.title;
@@ -61,8 +66,18 @@
 			if (metadata.date) {
 				citation.date = metadata.date;
 			}
+
+			// Show warning if AI was used
+			if (metadata.aiExtracted) {
+				metadataWasAIExtracted = true;
+				toast.warning('Metadata extracted using AI - please verify accuracy', {
+					duration: 5000,
+					description: 'Author information was extracted using AI since it could not be found automatically.'
+				});
+			}
 		} catch (error) {
 			console.error('Error extracting metadata:', error);
+			toast.error('Failed to extract metadata from URL');
 		} finally {
 			isExtracting = false;
 		}
@@ -268,8 +283,18 @@
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<div>
-				<label class="mb-1 block font-semibold">First Name<span class="text-red-500">*</span></label
-				>
+				<label class="mb-1 block font-semibold">
+					First Name<span class="text-red-500">*</span>
+					{#if metadataWasAIExtracted}
+						<span
+							class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
+							title="Extracted using AI"
+						>
+							<Sparkles size={12} />
+							AI
+						</span>
+					{/if}
+				</label>
 				<input
 					type="text"
 					bind:value={citation.firstName}

@@ -1,10 +1,5 @@
-export interface ExtractedMetadata {
-	title?: string;
-	author?: string;
-	publisher?: string;
-	date?: string;
-	description?: string;
-}
+import type { ExtractedMetadata, AIConfig } from '$lib/types';
+import { extractMetadataWithAI } from './aiMetadataExtractor';
 
 const CORS_PROXIES = [
 	'https://api.allorigins.win/raw?url=',
@@ -12,7 +7,10 @@ const CORS_PROXIES = [
 	'https://api.codetabs.com/v1/proxy?quest='
 ];
 
-export async function extractMetadata(url: string): Promise<ExtractedMetadata> {
+export async function extractMetadata(
+	url: string,
+	aiConfig?: AIConfig
+): Promise<ExtractedMetadata> {
 	// Try direct fetch first, then fall back to CORS proxies
 	let html: string | null = null;
 	let lastError: Error | null = null;
@@ -52,7 +50,8 @@ export async function extractMetadata(url: string): Promise<ExtractedMetadata> {
 		console.error('Failed to fetch URL:', lastError);
 		// Return basic metadata from URL
 		return {
-			publisher: new URL(url).hostname.replace('www.', '')
+			publisher: new URL(url).hostname.replace('www.', ''),
+			aiExtracted: false
 		};
 	}
 
@@ -60,7 +59,9 @@ export async function extractMetadata(url: string): Promise<ExtractedMetadata> {
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(html, 'text/html');
 
-		const metadata: ExtractedMetadata = {};
+		const metadata: ExtractedMetadata = {
+			aiExtracted: false
+		};
 
 		// Extract title
 		metadata.title =
@@ -117,12 +118,37 @@ export async function extractMetadata(url: string): Promise<ExtractedMetadata> {
 			metadata.date = formatDate(rawDate);
 		}
 
+		// If author is missing and AI is configured, try AI extraction
+		if (!metadata.author && aiConfig && aiConfig.provider !== 'none' && aiConfig.apiKey) {
+			try {
+				const aiMetadata = await extractMetadataWithAI(url, html, aiConfig);
+
+				// Only use AI-extracted data for missing fields
+				if (!metadata.author && aiMetadata.author) {
+					metadata.author = aiMetadata.author;
+					metadata.aiExtracted = true;
+				}
+				if (!metadata.title && aiMetadata.title) {
+					metadata.title = aiMetadata.title;
+					metadata.aiExtracted = true;
+				}
+				if (!metadata.date && aiMetadata.date) {
+					metadata.date = aiMetadata.date;
+					metadata.aiExtracted = true;
+				}
+			} catch (aiError) {
+				console.error('AI extraction failed, using algorithmic results:', aiError);
+				// Continue with algorithmic results
+			}
+		}
+
 		return metadata;
 	} catch (error) {
 		console.error('Failed to parse metadata:', error);
 		// Return basic metadata from URL
 		return {
-			publisher: new URL(url).hostname.replace('www.', '')
+			publisher: new URL(url).hostname.replace('www.', ''),
+			aiExtracted: false
 		};
 	}
 }
