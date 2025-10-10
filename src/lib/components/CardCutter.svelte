@@ -72,7 +72,8 @@
 				metadataWasAIExtracted = true;
 				toast.warning('Metadata extracted using AI - please verify accuracy', {
 					duration: 5000,
-					description: 'Author information was extracted using AI since it could not be found automatically.'
+					description:
+						'Author information was extracted using AI since it could not be found automatically.'
 				});
 			}
 		} catch (error) {
@@ -266,9 +267,8 @@
 </script>
 
 <div class="space-y-6">
-		<h2 class="mb-4 text-xl font-bold">Source Information</h2>
+	<h2 class="mb-4 text-xl font-bold">Source Information</h2>
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
-
 		<div class="mb-4" data-intro="url-input">
 			<label class="mb-1 block font-semibold">
 				Article URL
@@ -372,7 +372,7 @@
 				<input
 					type="text"
 					bind:value={citation.code}
-					placeholder="VCHS CL"
+					placeholder="School Code Here"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>
