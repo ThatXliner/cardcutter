@@ -36,7 +36,7 @@ An automatic debate card cutting tool for NSDA debate that helps you format evid
 
 ### 1. Enter Source Information
 - Paste the article URL in the "Article URL" field
-- The app will automatically extract metadata
+- The app will automatically extract metadata (AI may be used if API key is provided to help extract fields that weren't detected)
 - Review and adjust citation fields as needed
 - Add your school code (e.g., "VCHS CL")
 
@@ -60,19 +60,19 @@ An automatic debate card cutting tool for NSDA debate that helps you format evid
 ## Development
 
 ### Prerequisites
-- Node.js 18+ and npm
+- Bun
 
 ### Setup
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 The app will be available at `http://localhost:5173` (or the next available port).
 
 ### Build for Production
 ```bash
-npm run build
+bun run build
 ```
 
 The static files will be output to the `build/` directory.
@@ -92,7 +92,7 @@ The static files will be output to the `build/` directory.
 ### Option 2: Manual Deployment
 
 ```bash
-npm run build
+bun run build
 # Upload the contents of the build/ directory to your web host
 ```
 
