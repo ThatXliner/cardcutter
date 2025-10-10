@@ -139,47 +139,58 @@
 
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 12pt;">';
 
-		// Name (first name in bold)
-		html += `<strong>${firstName}</strong> ${lastName}`;
+		// Split firstName to handle middle initials (e.g., "Michael J." -> bold only "Michael")
+		const firstNameParts = firstName.trim().split(' ');
+		const onlyFirstName = firstNameParts[0];
+		const restOfFirstName = firstNameParts.slice(1).join(' ');
+
+		// Name (only first name word in bold, rest normal)
+		html += `<strong>${onlyFirstName}</strong>`;
+		if (restOfFirstName) {
+			html += ` ${restOfFirstName}`;
+		}
+		html += ` ${lastName}`;
 
 		// Qualifications
 		if (qualifications) {
 			html += ` (<strong>${qualifications}</strong>)`;
 		}
 
-		// Date
+		// Date (normal, not bold)
 		if (date) {
 			html += `; ${date}`;
 		}
 
-		// Article title in italics
+		// Start bracket - everything from here goes inside brackets
+		html += ' [';
+
+		// Article title in italics (inside brackets, no semicolon before it)
 		if (articleTitle) {
-			html += ` [<em>${articleTitle}</em>`;
+			html += `<em>${articleTitle}</em>`;
 		}
 
-		// Source
+		// Source (semicolon separator)
 		if (source) {
 			html += `; ${source}`;
 		}
 
-		// URL
+		// URL (semicolon separator)
 		if (url) {
 			html += `; ${url}`;
 		}
 
-		// Date of access
+		// Date of access (semicolon separator)
 		if (dateOfAccess) {
 			html += `; DOA ${dateOfAccess}`;
 		}
 
-		// Code
+		// Code (space before //)
 		if (code) {
 			html += ` //${code}`;
 		}
 
-		if (articleTitle) {
-			html += ']';
-		}
+		// Close bracket
+		html += ']';
 
 		html += '</p>';
 
