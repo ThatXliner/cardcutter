@@ -236,8 +236,8 @@
 </script>
 
 <div class="space-y-6">
-	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 		<h2 class="mb-4 text-xl font-bold">Source Information</h2>
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 
 		<div class="mb-4">
 			<label class="mb-1 block font-semibold">
