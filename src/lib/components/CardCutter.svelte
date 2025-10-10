@@ -269,7 +269,7 @@
 		<h2 class="mb-4 text-xl font-bold">Source Information</h2>
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 
-		<div class="mb-4">
+		<div class="mb-4" data-intro="url-input">
 			<label class="mb-1 block font-semibold">
 				Article URL
 				{#if isExtracting}
@@ -285,7 +285,7 @@
 			/>
 		</div>
 
-		<div class="grid gap-4 md:grid-cols-2">
+		<div class="grid gap-4 md:grid-cols-2" data-intro="citation-fields">
 			<div>
 				<label class="mb-1 block font-semibold">
 					First Name<span class="text-red-500">*</span>
@@ -383,6 +383,7 @@
 		<h2 class="mb-4 text-xl font-bold">Evidence Text<span class="text-red-500">*</span></h2>
 
 		<textarea
+			data-intro="evidence-text"
 			bind:value={sourceText}
 			onmouseup={handleTextSelection}
 			onkeyup={handleTextSelection}
@@ -392,7 +393,7 @@
 
 		<div class="mb-2">
 			<p class="mb-2 font-semibold">Apply Highlight Level:</p>
-			<div class="flex flex-wrap gap-2">
+			<div class="flex flex-wrap gap-2" data-intro="highlight-buttons">
 				{#each highlightConfig.levels as level (level.id)}
 					<button
 						onclick={() => applyHighlight(level.id)}
@@ -424,7 +425,7 @@
 		{/if}
 	</div>
 
-	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm" data-intro="preview">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-xl font-bold">Card Preview</h2>
 			<button

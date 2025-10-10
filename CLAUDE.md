@@ -17,14 +17,14 @@ NSDA Debate Card Cutter - A full-stack SvelteKit application that helps debate s
 ## Development Commands
 
 ```bash
-npm run dev          # Start dev server (usually http://localhost:5173)
-npm run build        # Build for production (outputs to build/)
-npm run preview      # Preview production build
-npm run check        # Type-check with svelte-check
-npm run check:watch  # Type-check in watch mode
-npm run format       # Format code with Prettier
-npm run lint         # Lint with Prettier and ESLint
-npm run test         # Run Playwright e2e tests
+bun run dev          # Start dev server (usually http://localhost:5173)
+bun run build        # Build for production (outputs to build/)
+bun run preview      # Preview production build
+bun run check        # Type-check with svelte-check
+bun run check:watch  # Type-check in watch mode
+bun run format       # Format code with Prettier
+bun run lint         # Lint with Prettier and ESLint
+bun run test         # Run Playwright e2e tests
 ```
 
 ## Architecture
@@ -115,7 +115,7 @@ This ensures existing highlights are preserved outside the selection.
 
 - **Platform**: Vercel (configured via `vercel.json` and `adapter-vercel`)
 - **Serverless Functions**: API routes in `src/routes/api/*` are deployed as Vercel serverless functions
-- **Environment**: Production uses npm for builds
+- **Environment**: Production uses Bunx for builds
 - **Note**: The old GitHub Actions workflow (`.github/workflows/deploy.yml`) for GitHub Pages is no longer used
 
 ### Browser APIs Used
