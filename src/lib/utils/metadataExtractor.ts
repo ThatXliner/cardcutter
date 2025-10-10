@@ -1,77 +1,63 @@
-export interface ExtractedMetadata {
-	title?: string;
-	author?: string;
-	publisher?: string;
-	date?: string;
-	description?: string;
-}
+import type { ExtractedMetadata, AIConfig } from '$lib/types';
+import { extractMetadataWithAI } from './aiMetadataExtractor';
 
-export async function extractMetadata(url: string): Promise<ExtractedMetadata> {
+export async function extractMetadata(
+	url: string,
+	aiConfig?: AIConfig
+): Promise<ExtractedMetadata> {
 	try {
-		// Use a CORS proxy for development or fetch directly if CORS is allowed
-		const response = await fetch(url);
-		const html = await response.text();
+		// Call the server-side API endpoint to fetch and parse metadata
+		const response = await fetch('/api/extract-metadata', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ url })
+		});
 
-		const parser = new DOMParser();
-		const doc = parser.parseFromString(html, 'text/html');
+		if (!response.ok) {
+			const error = await response.json();
+			console.error('Failed to fetch metadata from server:', error);
+			// Return basic metadata from URL
+			return {
+				publisher: new URL(url).hostname.replace('www.', ''),
+				aiExtracted: false
+			};
+		}
 
-		const metadata: ExtractedMetadata = {};
+		const { html, metadata } = await response.json();
 
-		// Extract title
-		metadata.title =
-			getMetaContent(doc, 'og:title') ||
-			getMetaContent(doc, 'twitter:title') ||
-			doc.querySelector('title')?.textContent ||
-			'';
+		// If author is missing and AI is configured, try AI extraction
+		if (!metadata.author && aiConfig && aiConfig.provider !== 'none' && aiConfig.apiKey) {
+			try {
+				const aiMetadata = await extractMetadataWithAI(url, html, aiConfig);
 
-		// Extract author
-		metadata.author =
-			getMetaContent(doc, 'author') ||
-			getMetaContent(doc, 'article:author') ||
-			getMetaContent(doc, 'og:article:author') ||
-			doc.querySelector('[rel="author"]')?.textContent ||
-			'';
-
-		// Extract publisher/site name
-		metadata.publisher =
-			getMetaContent(doc, 'og:site_name') ||
-			getMetaContent(doc, 'publisher') ||
-			getMetaContent(doc, 'application-name') ||
-			new URL(url).hostname.replace('www.', '');
-
-		// Extract date
-		metadata.date =
-			getMetaContent(doc, 'article:published_time') ||
-			getMetaContent(doc, 'datePublished') ||
-			getMetaContent(doc, 'date') ||
-			doc.querySelector('time[datetime]')?.getAttribute('datetime') ||
-			'';
-
-		// Clean up date format if it's ISO
-		if (metadata.date && metadata.date.includes('T')) {
-			const date = new Date(metadata.date);
-			metadata.date = date.toLocaleDateString('en-US', {
-				year: 'numeric',
-				month: 'long',
-				day: 'numeric'
-			});
+				// Only use AI-extracted data for missing fields
+				if (!metadata.author && aiMetadata.author) {
+					metadata.author = aiMetadata.author;
+					metadata.aiExtracted = true;
+				}
+				if (!metadata.title && aiMetadata.title) {
+					metadata.title = aiMetadata.title;
+					metadata.aiExtracted = true;
+				}
+				if (!metadata.date && aiMetadata.date) {
+					metadata.date = aiMetadata.date;
+					metadata.aiExtracted = true;
+				}
+			} catch (aiError) {
+				console.error('AI extraction failed, using algorithmic results:', aiError);
+				// Continue with algorithmic results
+			}
 		}
 
 		return metadata;
 	} catch (error) {
 		console.error('Failed to extract metadata:', error);
-		return {};
+		// Return basic metadata from URL
+		return {
+			publisher: new URL(url).hostname.replace('www.', ''),
+			aiExtracted: false
+		};
 	}
-}
-
-function getMetaContent(doc: Document, property: string): string | null {
-	// Try property attribute (Open Graph)
-	let element = doc.querySelector(`meta[property="${property}"]`);
-	if (element) return element.getAttribute('content');
-
-	// Try name attribute
-	element = doc.querySelector(`meta[name="${property}"]`);
-	if (element) return element.getAttribute('content');
-
-	return null;
 }

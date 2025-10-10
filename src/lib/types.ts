@@ -24,3 +24,25 @@ export interface TextSegment {
 	text: string;
 	highlightLevel: number | null; // null means no highlight
 }
+
+export type AIProvider = 'none' | 'openai' | 'anthropic' | 'google';
+
+export interface AIConfig {
+	provider: AIProvider;
+	apiKey: string;
+	model: string;
+}
+
+export interface ExtractedMetadata {
+	title?: string;
+	author?: string;
+	publisher?: string;
+	date?: string;
+	description?: string;
+	aiExtracted?: boolean; // Flag indicating if AI was used for extraction
+}
+
+export interface AIModelOption {
+	value: string;
+	label: string;
+}

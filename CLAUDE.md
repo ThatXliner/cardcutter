@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NSDA Debate Card Cutter - A SvelteKit static site that helps debate students format evidence citations and apply customizable text highlighting. The app extracts metadata from URLs, allows multi-level text highlighting, and outputs rich text (HTML) that preserves formatting when copied to Word/Google Docs.
+NSDA Debate Card Cutter - A full-stack SvelteKit application that helps debate students format evidence citations and apply customizable text highlighting. The app extracts metadata from URLs, allows multi-level text highlighting, and outputs rich text (HTML) that preserves formatting when copied to Word/Google Docs.
 
 ## Technology Stack
 
@@ -12,28 +12,29 @@ NSDA Debate Card Cutter - A SvelteKit static site that helps debate students for
 - **TypeScript** - All source files use TS
 - **Tailwind CSS 4** - Utility-first styling
 - **Vite 7** - Build tool
-- **adapter-static** - Configured for GitHub Pages deployment (SSR disabled, prerendering enabled)
+- **adapter-vercel** - Configured for Vercel deployment with serverless functions
 
 ## Development Commands
 
 ```bash
-npm run dev          # Start dev server (usually http://localhost:5173)
-npm run build        # Build for production (outputs to build/)
-npm run preview      # Preview production build
-npm run check        # Type-check with svelte-check
-npm run check:watch  # Type-check in watch mode
-npm run format       # Format code with Prettier
-npm run lint         # Lint with Prettier and ESLint
-npm run test         # Run Playwright e2e tests
+bun run dev          # Start dev server (usually http://localhost:5173)
+bun run build        # Build for production (outputs to build/)
+bun run preview      # Preview production build
+bun run check        # Type-check with svelte-check
+bun run check:watch  # Type-check in watch mode
+bun run format       # Format code with Prettier
+bun run lint         # Lint with Prettier and ESLint
+bun run test         # Run Playwright e2e tests
 ```
 
 ## Architecture
 
-### Static Site Configuration
+### Full-Stack Configuration
 
-- **`src/routes/+layout.ts`**: Exports `prerender = true` and `ssr = false` for client-side-only static generation
-- **`svelte.config.js`**: Uses `adapter-static` with output to `build/` directory
-- **`.github/workflows/deploy.yml`**: GitHub Actions workflow for automatic deployment (uses Bun, not npm)
+- **`src/routes/+layout.ts`**: Exports `prerender = true` for static page generation with SSR enabled
+- **`svelte.config.js`**: Uses `adapter-vercel` for Vercel deployment
+- **`vercel.json`**: Vercel deployment configuration
+- **`src/routes/api/extract-metadata/+server.ts`**: Serverless API endpoint for URL fetching (bypasses CORS)
 
 ### State Management
 
@@ -47,18 +48,24 @@ npm run test         # Run Playwright e2e tests
 
 ### Core Data Flow
 
-1. **URL Metadata Extraction** (`src/lib/utils/metadataExtractor.ts`):
-   - Fetches article HTML via native fetch
-   - Parses Open Graph and meta tags using `DOMParser`
+1. **URL Metadata Extraction**:
+   - **Client** (`src/lib/utils/metadataExtractor.ts`): Calls `/api/extract-metadata` endpoint
+   - **Server** (`src/routes/api/extract-metadata/+server.ts`): Fetches article HTML and parses Open Graph/meta tags using regex (no CORS issues)
    - Extracts: title, author, publisher, date
-   - **Note**: May fail due to CORS - no proxy configured
+   - Falls back to AI extraction (client-side with BYOK) if author is missing
 
-2. **Text Highlighting** (`CardCutter.svelte`):
+2. **AI Metadata Extraction** (`src/lib/utils/aiMetadataExtractor.ts`):
+   - **Client-side only** - uses user-provided API keys (BYOK model)
+   - Supports OpenAI, Anthropic, and Google AI providers
+   - Uses Vercel AI SDK (`ai` package) with `generateText()`
+   - Only used when standard extraction fails to find author
+
+3. **Text Highlighting** (`CardCutter.svelte`):
    - Maintains `textSegments` array mapping character positions to highlight levels
    - `applyHighlight()` uses a `Map<position, highlightLevel>` to merge new highlights with existing ones
    - **Critical**: Highlights are position-based and preserved when applying overlapping highlights (e.g., highlighting different parts of the same word)
 
-3. **Rich Text Output** (`src/lib/utils/clipboard.ts`):
+4. **Rich Text Output** (`src/lib/utils/clipboard.ts`):
    - Generates HTML with inline styles (Calibri 12pt, bold/underline/colors per highlight level)
    - Uses `navigator.clipboard.write()` with `ClipboardItem` containing both `text/html` and `text/plain`
    - Falls back to plain text if clipboard API fails
@@ -104,9 +111,12 @@ When applying highlights (in `applyHighlight()`):
 
 This ensures existing highlights are preserved outside the selection.
 
-### Deployment Note
+### Deployment
 
-GitHub Actions workflow uses **Bun** (`oven-sh/setup-bun@v2`), not npm. Local development uses npm.
+- **Platform**: Vercel (configured via `vercel.json` and `adapter-vercel`)
+- **Serverless Functions**: API routes in `src/routes/api/*` are deployed as Vercel serverless functions
+- **Environment**: Production uses Bunx for builds
+- **Note**: The old GitHub Actions workflow (`.github/workflows/deploy.yml`) for GitHub Pages is no longer used
 
 ### Browser APIs Used
 

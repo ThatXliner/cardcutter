@@ -1,13 +1,17 @@
 <script lang="ts">
 	import type { CitationData, TextSegment } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
+	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
 	import { copyRichText } from '$lib/utils/clipboard';
+	import { toast } from 'svelte-sonner';
+	import { Sparkles } from 'lucide-svelte';
 
 	let url = $state('');
 	let sourceText = $state('');
 	let isExtracting = $state(false);
 	let copySuccess = $state(false);
+	let metadataWasAIExtracted = $state(false);
 
 	let citation = $state<CitationData>({
 		firstName: '',
@@ -35,9 +39,10 @@
 
 		isExtracting = true;
 		citation.url = url;
+		metadataWasAIExtracted = false;
 
 		try {
-			const metadata = await extractMetadata(url);
+			const metadata = await extractMetadata(url, aiConfig.config);
 
 			if (metadata.title) {
 				citation.articleTitle = metadata.title;
@@ -61,8 +66,18 @@
 			if (metadata.date) {
 				citation.date = metadata.date;
 			}
+
+			// Show warning if AI was used
+			if (metadata.aiExtracted) {
+				metadataWasAIExtracted = true;
+				toast.warning('Metadata extracted using AI - please verify accuracy', {
+					duration: 5000,
+					description: 'Author information was extracted using AI since it could not be found automatically.'
+				});
+			}
 		} catch (error) {
 			console.error('Error extracting metadata:', error);
+			toast.error('Failed to extract metadata from URL');
 		} finally {
 			isExtracting = false;
 		}
@@ -228,9 +243,13 @@
 	}
 
 	function escapeHtml(text: string): string {
-		const div = document.createElement('div');
-		div.textContent = text;
-		return div.innerHTML;
+		// Manual HTML escaping (works in both SSR and browser)
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
 	}
 
 	async function handleCopy() {
@@ -247,10 +266,10 @@
 </script>
 
 <div class="space-y-6">
-	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 		<h2 class="mb-4 text-xl font-bold">Source Information</h2>
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 
-		<div class="mb-4">
+		<div class="mb-4" data-intro="url-input">
 			<label class="mb-1 block font-semibold">
 				Article URL
 				{#if isExtracting}
@@ -266,10 +285,20 @@
 			/>
 		</div>
 
-		<div class="grid gap-4 md:grid-cols-2">
+		<div class="grid gap-4 md:grid-cols-2" data-intro="citation-fields">
 			<div>
-				<label class="mb-1 block font-semibold">First Name<span class="text-red-500">*</span></label
-				>
+				<label class="mb-1 block font-semibold">
+					First Name<span class="text-red-500">*</span>
+					{#if metadataWasAIExtracted}
+						<span
+							class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
+							title="Extracted using AI"
+						>
+							<Sparkles size={12} />
+							AI
+						</span>
+					{/if}
+				</label>
 				<input
 					type="text"
 					bind:value={citation.firstName}
@@ -354,6 +383,7 @@
 		<h2 class="mb-4 text-xl font-bold">Evidence Text<span class="text-red-500">*</span></h2>
 
 		<textarea
+			data-intro="evidence-text"
 			bind:value={sourceText}
 			onmouseup={handleTextSelection}
 			onkeyup={handleTextSelection}
@@ -363,7 +393,7 @@
 
 		<div class="mb-2">
 			<p class="mb-2 font-semibold">Apply Highlight Level:</p>
-			<div class="flex flex-wrap gap-2">
+			<div class="flex flex-wrap gap-2" data-intro="highlight-buttons">
 				{#each highlightConfig.levels as level (level.id)}
 					<button
 						onclick={() => applyHighlight(level.id)}
@@ -395,7 +425,7 @@
 		{/if}
 	</div>
 
-	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm" data-intro="preview">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-xl font-bold">Card Preview</h2>
 			<button
