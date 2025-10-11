@@ -26,7 +26,8 @@
 			day: '2-digit',
 			year: '2-digit'
 		}),
-		code: ''
+		code: '',
+		pageNumber: ''
 	});
 
 	let textSegments = $state<TextSegment[]>([]);
@@ -153,31 +154,43 @@
 			source,
 			url,
 			dateOfAccess,
-			code
+			code,
+			pageNumber
 		} = citation;
 
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 12pt;">';
 
-		// Split firstName to handle middle initials (e.g., "Michael J." -> bold only "Michael")
-		const firstNameParts = firstName.trim().split(' ');
-		const onlyFirstName = firstNameParts[0];
-		const restOfFirstName = firstNameParts.slice(1).join(' ');
+		// If both lastName and pageNumber are present, start with "LastName <page>" in bold
+		if (lastName && pageNumber) {
+			html += `<strong>${lastName} ${pageNumber}</strong>`;
 
-		// Name (only first name word in bold, rest normal)
-		html += `<strong>${onlyFirstName}</strong>`;
-		if (restOfFirstName) {
-			html += ` ${restOfFirstName}`;
+			// Add firstName after a space (not bold when page number is present)
+			if (firstName) {
+				html += ` ${firstName}`;
+			}
+		} else {
+			// Original format: start with firstName lastName
+			// Split firstName to handle middle initials (e.g., "Michael J." -> bold only "Michael")
+			const firstNameParts = firstName.trim().split(' ');
+			const onlyFirstName = firstNameParts[0];
+			const restOfFirstName = firstNameParts.slice(1).join(' ');
+
+			// Name (only first name word in bold, rest normal)
+			html += `<strong>${onlyFirstName}</strong>`;
+			if (restOfFirstName) {
+				html += ` ${restOfFirstName}`;
+			}
+			html += ` ${lastName}`;
 		}
-		html += ` ${lastName}`;
 
 		// Qualifications
 		if (qualifications) {
 			html += ` (<strong>${qualifications}</strong>)`;
 		}
 
-		// Date (normal, not bold)
+		// Date (bold)
 		if (date) {
-			html += `; ${date}`;
+			html += `; <strong>${date}</strong>`;
 		}
 
 		// Start bracket - everything from here goes inside brackets
@@ -347,6 +360,16 @@
 					type="text"
 					bind:value={citation.dateOfAccess}
 					placeholder="11/9/22"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+
+			<div>
+				<label class="mb-1 block font-semibold">Page Number</label>
+				<input
+					type="text"
+					bind:value={citation.pageNumber}
+					placeholder="5"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>
