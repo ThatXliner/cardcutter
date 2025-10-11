@@ -37,6 +37,10 @@ export async function extractMetadata(
 					metadata.author = aiMetadata.author;
 					metadata.aiExtracted = true;
 				}
+				if (!metadata.qualifications && aiMetadata.qualifications) {
+					metadata.qualifications = aiMetadata.qualifications;
+					metadata.aiExtracted = true;
+				}
 				if (!metadata.title && aiMetadata.title) {
 					metadata.title = aiMetadata.title;
 					metadata.aiExtracted = true;

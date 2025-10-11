@@ -67,6 +67,10 @@
 				citation.date = metadata.date;
 			}
 
+			if (metadata.qualifications) {
+				citation.qualifications = metadata.qualifications;
+			}
+
 			// Show warning if AI was used
 			if (metadata.aiExtracted) {
 				metadataWasAIExtracted = true;

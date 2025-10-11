@@ -47,6 +47,7 @@ export async function extractMetadataWithAI(
 Return ONLY a valid JSON object with these fields (use empty string if not found):
 {
   "author": "Full author name (First Last)",
+  "qualifications": "Author's credentials, job title, or organizational affiliation (e.g., 'Senior Political Scientist at the RAND Corporation')",
   "title": "Article title",
   "publisher": "Publisher/site name",
   "date": "Publication date in format 'Month YYYY' (e.g., 'March 2022')"
@@ -67,6 +68,7 @@ Return only the JSON object, no additional text.`
 
 		return {
 			author: parsed.author || '',
+			qualifications: parsed.qualifications || '',
 			title: parsed.title || '',
 			publisher: parsed.publisher || '',
 			date: parsed.date || '',

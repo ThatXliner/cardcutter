@@ -36,6 +36,7 @@ export interface AIConfig {
 export interface ExtractedMetadata {
 	title?: string;
 	author?: string;
+	qualifications?: string;
 	publisher?: string;
 	date?: string;
 	description?: string;
