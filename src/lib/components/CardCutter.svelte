@@ -158,7 +158,7 @@
 			pageNumber
 		} = citation;
 
-		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 12pt;">';
+		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
 
 		// If both lastName and pageNumber are present, start with "LastName <page>" in bold
 		if (lastName && pageNumber) {
@@ -231,17 +231,17 @@
 
 	function generateCardHtml(): string {
 		let html = generateCitationHtml();
-		html += '<p style="margin-top: 8px; font-family: Calibri, sans-serif; font-size: 12pt;">';
+		html += '<p style="margin-top: 8px; font-family: Calibri, sans-serif; font-size: 8pt;">';
 
 		if (textSegments.length > 0) {
 			for (const segment of textSegments) {
 				const level = highlightConfig.levels.find((l) => l.id === segment.highlightLevel);
 
 				if (level) {
-					let style = 'font-family: Calibri, sans-serif; font-size: 12pt;';
+					let style = 'font-family: Calibri, sans-serif; font-size: 8pt;';
 					if (level.bold) style += ' font-weight: bold;';
 					if (level.underline) style += ' text-decoration: underline;';
-					if (level.fontSize !== 100) style += ` font-size: ${level.fontSize}%;`;
+					if (level.fontSize !== 100) style += ` font-size: ${(8 * level.fontSize) / 100}pt;`;
 					if (level.color && level.color !== '#000000') style += ` color: ${level.color};`;
 					if (level.backgroundColor && level.backgroundColor !== '#ffffff')
 						style += ` background-color: ${level.backgroundColor};`;
