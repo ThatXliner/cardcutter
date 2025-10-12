@@ -45,6 +45,7 @@
 		"ai": "^5.0.65",
 		"intro.js": "^8.3.2",
 		"lucide-svelte": "^0.545.0",
+		"pdf-parse": "^2.2.9",
 		"svelte-sonner": "^1.0.5"
 	}
 }
