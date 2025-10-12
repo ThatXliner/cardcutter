@@ -208,9 +208,18 @@
 			html += ` (<strong>${qualifications}</strong>)`;
 		}
 
-		// Date (bold)
+		// Date (only year is bold)
 		if (date) {
-			html += `; <strong>${date}</strong>`;
+			// Try to extract year and bold only that
+			const yearMatch = date.match(/\b(\d{4})\b/);
+			if (yearMatch) {
+				const year = yearMatch[1];
+				const dateWithBoldYear = date.replace(year, `<strong>${year}</strong>`);
+				html += `; ${dateWithBoldYear}`;
+			} else {
+				// If no year found, just add the date as-is
+				html += `; ${date}`;
+			}
 		}
 
 		// Start bracket - everything from here goes inside brackets
