@@ -7,6 +7,21 @@
 	import { toast } from 'svelte-sonner';
 	import { Sparkles } from 'lucide-svelte';
 
+	const CODE_STORAGE_KEY = 'cardcutter_user_code';
+
+	// Load code from localStorage
+	function loadCode(): string {
+		if (typeof window === 'undefined') return '';
+		const stored = localStorage.getItem(CODE_STORAGE_KEY);
+		return stored || '';
+	}
+
+	// Save code to localStorage
+	function saveCode(code: string) {
+		if (typeof window === 'undefined') return;
+		localStorage.setItem(CODE_STORAGE_KEY, code);
+	}
+
 	let url = $state('');
 	let sourceText = $state('');
 	let isExtracting = $state(false);
@@ -26,8 +41,13 @@
 			day: '2-digit',
 			year: '2-digit'
 		}),
-		code: '',
+		code: loadCode(),
 		pageNumber: ''
+	});
+
+	// Watch for code changes and save to localStorage
+	$effect(() => {
+		saveCode(citation.code);
 	});
 
 	let textSegments = $state<TextSegment[]>([]);
