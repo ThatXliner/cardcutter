@@ -230,12 +230,14 @@
 			html += `<em>${articleTitle}</em>`;
 		}
 
-		// Source (semicolon separator)
-		if (source) {
+		// Source/Publisher (only include if it's not just a URL-like string)
+		// Skip if source looks like a URL (contains protocol, starts with www, or contains a dot like "example.com")
+		const sourceIsUrl = source && (source.includes('://') || source.startsWith('www.') || source.includes('.'));
+		if (source && !sourceIsUrl) {
 			html += `; ${source}`;
 		}
 
-		// URL (semicolon separator)
+		// URL always comes after source/publisher (semicolon separator)
 		if (url) {
 			html += `; ${url}`;
 		}

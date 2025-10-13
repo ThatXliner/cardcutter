@@ -27,8 +27,19 @@ export async function extractMetadata(
 
 		const { html, metadata } = await response.json();
 
-		// If author is missing and AI is configured, try AI extraction
-		if (!metadata.author && aiConfig && aiConfig.provider !== 'none' && aiConfig.apiKey) {
+		// Check if publisher is URL-like (contains a dot, protocol, or starts with www)
+		const publisherIsUrlLike = metadata.publisher &&
+			(metadata.publisher.includes('.') ||
+			 metadata.publisher.includes('://') ||
+			 metadata.publisher.startsWith('www.'));
+
+		// If author is missing OR publisher looks like a URL, and AI is configured, try AI extraction
+		const needsAI = (!metadata.author || publisherIsUrlLike) &&
+			aiConfig &&
+			aiConfig.provider !== 'none' &&
+			aiConfig.apiKey;
+
+		if (needsAI) {
 			try {
 				const aiMetadata = await extractMetadataWithAI(url, html, aiConfig);
 
@@ -47,6 +58,11 @@ export async function extractMetadata(
 				}
 				if (!metadata.date && aiMetadata.date) {
 					metadata.date = aiMetadata.date;
+					metadata.aiExtracted = true;
+				}
+				// Use AI publisher if current publisher is URL-like
+				if (publisherIsUrlLike && aiMetadata.publisher && !aiMetadata.publisher.includes('.')) {
+					metadata.publisher = aiMetadata.publisher;
 					metadata.aiExtracted = true;
 				}
 			} catch (aiError) {
