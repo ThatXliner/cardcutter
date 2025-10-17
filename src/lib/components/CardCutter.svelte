@@ -188,8 +188,11 @@
 			if (firstName) {
 				html += ` ${firstName}`;
 			}
+		} else if (lastName && firstName) {
+			// If we have both names but no page number: Last, First (bold last name only)
+			html += `<strong>${lastName}</strong>, ${firstName}`;
 		} else {
-			// Original format: start with firstName lastName
+			// Fallback: just firstName with first word bold
 			// Split firstName to handle middle initials (e.g., "Michael J." -> bold only "Michael")
 			const firstNameParts = firstName.trim().split(' ');
 			const onlyFirstName = firstNameParts[0];
@@ -200,7 +203,9 @@
 			if (restOfFirstName) {
 				html += ` ${restOfFirstName}`;
 			}
-			html += ` ${lastName}`;
+			if (lastName) {
+				html += ` ${lastName}`;
+			}
 		}
 
 		// Qualifications
