@@ -48,3 +48,9 @@ export interface AIModelOption {
 	value: string;
 	label: string;
 }
+
+export interface HighlightRange {
+	start: number;
+	end: number;
+	level: number;
+}

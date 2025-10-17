@@ -1,8 +1,9 @@
 <script lang="ts">
-	import type { CitationData, TextSegment } from '$lib/types';
+	import type { CitationData, TextSegment, HighlightRange } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
+	import { autoHighlightWithAI } from '$lib/utils/aiHighlighter';
 	import { copyRichText } from '$lib/utils/clipboard';
 	import { toast } from 'svelte-sonner';
 	import { Sparkles } from 'lucide-svelte';
@@ -25,6 +26,7 @@
 	let url = $state('');
 	let sourceText = $state('');
 	let isExtracting = $state(false);
+	let isAutoHighlighting = $state(false);
 	let copySuccess = $state(false);
 	let metadataWasAIExtracted = $state(false);
 
@@ -162,6 +164,77 @@
 
 	function clearHighlights() {
 		textSegments = [];
+	}
+
+	async function handleAutoHighlight() {
+		if (!sourceText.trim()) {
+			toast.error('Please enter evidence text first');
+			return;
+		}
+
+		if (aiConfig.config.provider === 'none' || !aiConfig.config.apiKey) {
+			toast.error('Please configure AI provider in settings first', {
+				description: 'Auto-highlighting requires an API key to be configured.'
+			});
+			return;
+		}
+
+		isAutoHighlighting = true;
+
+		try {
+			toast.info('Analyzing evidence text...', {
+				description: 'AI is identifying important information to highlight.'
+			});
+
+			const ranges = await autoHighlightWithAI(
+				sourceText,
+				highlightConfig.levels,
+				aiConfig.config
+			);
+
+			// Convert ranges to text segments
+			const segments: TextSegment[] = [];
+			let lastPos = 0;
+
+			for (const range of ranges) {
+				// Add unhighlighted text before this range
+				if (range.start > lastPos) {
+					segments.push({
+						text: sourceText.substring(lastPos, range.start),
+						highlightLevel: null
+					});
+				}
+
+				// Add highlighted text
+				segments.push({
+					text: sourceText.substring(range.start, range.end),
+					highlightLevel: range.level
+				});
+
+				lastPos = range.end;
+			}
+
+			// Add any remaining unhighlighted text
+			if (lastPos < sourceText.length) {
+				segments.push({
+					text: sourceText.substring(lastPos),
+					highlightLevel: null
+				});
+			}
+
+			textSegments = segments;
+
+			toast.success('Auto-highlighting complete!', {
+				description: `Applied ${ranges.length} highlight${ranges.length === 1 ? '' : 's'} based on debate importance.`
+			});
+		} catch (error) {
+			console.error('Auto-highlighting failed:', error);
+			toast.error('Failed to auto-highlight text', {
+				description: error instanceof Error ? error.message : 'An unknown error occurred'
+			});
+		} finally {
+			isAutoHighlighting = false;
+		}
 	}
 
 	function generateCitationHtml(): string {
@@ -472,6 +545,14 @@
 						{level.name}
 					</button>
 				{/each}
+				<button
+					onclick={handleAutoHighlight}
+					disabled={!sourceText || isAutoHighlighting}
+					class="rounded bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2"
+				>
+					<Sparkles size={16} />
+					{isAutoHighlighting ? 'Analyzing...' : 'Auto-Highlight'}
+				</button>
 				<button
 					onclick={clearHighlights}
 					class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
