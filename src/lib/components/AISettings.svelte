@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
+	import { exaConfig } from '$lib/stores/exaConfig.svelte';
 	import type { AIProvider, AIModelOption } from '$lib/types';
 	import { Eye, EyeOff } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
@@ -7,9 +8,12 @@
 	let { open = $bindable(false) } = $props();
 
 	let showApiKey = $state(false);
+	let showExaApiKey = $state(false);
 	let localProvider = $state(aiConfig.config.provider);
 	let localApiKey = $state(aiConfig.config.apiKey);
 	let localModel = $state(aiConfig.config.model);
+	let localExaEnabled = $state(exaConfig.config.enabled);
+	let localExaApiKey = $state(exaConfig.config.apiKey);
 
 	const providerOptions: { value: AIProvider; label: string }[] = [
 		{ value: 'none', label: 'None (Disabled)' },
@@ -41,6 +45,8 @@
 			localProvider = aiConfig.config.provider;
 			localApiKey = aiConfig.config.apiKey;
 			localModel = aiConfig.config.model;
+			localExaEnabled = exaConfig.config.enabled;
+			localExaApiKey = exaConfig.config.apiKey;
 		}
 	});
 
@@ -60,6 +66,11 @@
 			model: localModel
 		});
 
+		exaConfig.updateConfig({
+			enabled: localExaEnabled,
+			apiKey: localExaApiKey
+		});
+
 		toast.success('AI settings saved successfully');
 		open = false;
 	}
@@ -68,7 +79,10 @@
 		localProvider = 'none';
 		localApiKey = '';
 		localModel = '';
+		localExaEnabled = false;
+		localExaApiKey = '';
 		aiConfig.clearConfig();
+		exaConfig.clearConfig();
 		toast.info('AI settings cleared');
 	}
 </script>
@@ -166,6 +180,70 @@
 						<strong>ℹ️ How it works:</strong> AI extraction will be used as a fallback when the automatic
 						extraction cannot find article metadata (especially author information). You'll be notified
 						when AI is used.
+					</div>
+
+					<!-- Exa Search Configuration -->
+					<div class="mt-6 border-t border-gray-300 pt-6">
+						<h3 class="mb-4 text-lg font-bold">Exa Web Search (Optional)</h3>
+
+						<div class="mb-4 rounded-lg bg-purple-50 p-4 text-sm text-purple-800">
+							<strong>🔍 Enhanced Search:</strong> Exa searches the web to find missing author qualifications,
+							names, and publication dates when they're not on the article page. Requires an AI provider to be configured above.
+						</div>
+
+						<!-- Enable Exa Toggle -->
+						<div class="mb-4">
+							<label class="flex items-center gap-2">
+								<input
+									type="checkbox"
+									bind:checked={localExaEnabled}
+									class="h-4 w-4 rounded border-gray-300"
+								/>
+								<span class="font-semibold">Enable Exa Search</span>
+							</label>
+						</div>
+
+						{#if localExaEnabled}
+							<!-- Exa API Key Input -->
+							<div>
+								<label class="mb-1 block font-semibold">Exa API Key</label>
+								<div class="relative">
+									<input
+										type={showExaApiKey ? 'text' : 'password'}
+										bind:value={localExaApiKey}
+										placeholder="Enter your Exa API key"
+										class="w-full rounded border border-gray-300 px-3 py-2 pr-10"
+									/>
+									<button
+										type="button"
+										onclick={() => (showExaApiKey = !showExaApiKey)}
+										class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+									>
+										{#if showExaApiKey}
+											<EyeOff size={20} />
+										{:else}
+											<Eye size={20} />
+										{/if}
+									</button>
+								</div>
+								<p class="mt-1 text-xs text-gray-600">
+									Get your API key from <a
+										href="https://dashboard.exa.ai/api-keys"
+										target="_blank"
+										class="text-blue-600 underline">dashboard.exa.ai</a>
+								</p>
+							</div>
+
+							<!-- What fields will be enhanced -->
+							<div class="mt-4 rounded-lg bg-green-50 p-4 text-sm text-green-800">
+								<strong>📋 Enhanced Fields:</strong>
+								<ul class="ml-4 mt-2 list-disc">
+									<li>Author name (if missing)</li>
+									<li>Author qualifications and credentials</li>
+									<li>Publication date (if missing)</li>
+								</ul>
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
