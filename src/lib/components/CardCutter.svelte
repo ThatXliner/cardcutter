@@ -160,6 +160,51 @@
 		textSegments = result;
 	}
 
+	function clearSelectedHighlights() {
+		if (!selectedText || selectionStart === selectionEnd) return;
+
+		// Build a highlight map from character position to highlight level
+		const highlightMap = new Map<number, number | null>();
+
+		// First, populate with existing highlights
+		let pos = 0;
+		for (const segment of textSegments) {
+			for (let i = 0; i < segment.text.length; i++) {
+				highlightMap.set(pos + i, segment.highlightLevel);
+			}
+			pos += segment.text.length;
+		}
+
+		// Clear highlights for selected positions
+		for (let i = selectionStart; i < selectionEnd; i++) {
+			highlightMap.set(i, null);
+		}
+
+		// Convert the map back to segments
+		const result: TextSegment[] = [];
+		let currentSegment: TextSegment | null = null;
+
+		for (let i = 0; i < sourceText.length; i++) {
+			const char = sourceText[i];
+			const highlight = highlightMap.get(i) ?? null;
+
+			if (!currentSegment || currentSegment.highlightLevel !== highlight) {
+				if (currentSegment) {
+					result.push(currentSegment);
+				}
+				currentSegment = { text: char, highlightLevel: highlight };
+			} else {
+				currentSegment.text += char;
+			}
+		}
+
+		if (currentSegment) {
+			result.push(currentSegment);
+		}
+
+		textSegments = result;
+	}
+
 	function clearHighlights() {
 		textSegments = [];
 	}
@@ -472,6 +517,13 @@
 						{level.name}
 					</button>
 				{/each}
+				<button
+					onclick={clearSelectedHighlights}
+					disabled={!selectedText}
+					class="rounded bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 disabled:opacity-50"
+				>
+					Clear Selected
+				</button>
 				<button
 					onclick={clearHighlights}
 					class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
