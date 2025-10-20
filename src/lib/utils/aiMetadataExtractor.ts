@@ -46,7 +46,7 @@ export async function extractMetadataWithAI(
 			system: `You are a metadata extraction assistant. Extract article metadata from HTML content.
 Return ONLY a valid JSON object with these fields (use empty string if not found):
 {
-  "author": "Full author name (First Last)",
+  "author": "Full author name (First Last). For multiple authors, separate with semicolons (e.g., 'John Doe; Jane Smith')",
   "qualifications": "Author's credentials, job title, or organizational affiliation (e.g., 'Senior Political Scientist at the RAND Corporation')",
   "title": "Article title",
   "publisher": "Publisher/site name",

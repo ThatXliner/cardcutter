@@ -1,7 +1,19 @@
-export interface CitationData {
+export interface Author {
 	firstName: string;
 	lastName: string;
 	qualifications: string;
+	qualificationsBold: boolean[]; // tracks which characters in qualifications are bold
+}
+
+export interface CitationData {
+	isOrganization: boolean;
+	organizationName: string;
+	authors: Author[];
+	// Legacy fields for backward compatibility during migration
+	firstName?: string;
+	lastName?: string;
+	qualifications?: string;
+	// Standard citation fields
 	date: string;
 	articleTitle: string;
 	source: string;
