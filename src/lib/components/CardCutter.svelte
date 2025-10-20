@@ -1,11 +1,12 @@
 <script lang="ts">
-	import type { CitationData, TextSegment } from '$lib/types';
+	import type { CitationData, TextSegment, Author } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
 	import { copyRichText } from '$lib/utils/clipboard';
 	import { toast } from 'svelte-sonner';
-	import { Sparkles } from 'lucide-svelte';
+	import { Sparkles, Plus, X } from 'lucide-svelte';
+	import QualificationInput from './QualificationInput.svelte';
 
 	const CODE_STORAGE_KEY = 'cardcutter_user_code';
 
@@ -22,6 +23,42 @@
 		localStorage.setItem(CODE_STORAGE_KEY, code);
 	}
 
+	// Migration helper for old citation data
+	function migrateLegacyCitation(oldData: any): CitationData {
+		// Check if already in new format
+		if (oldData.authors !== undefined) {
+			return oldData;
+		}
+
+		// Convert old format to new format
+		const authors: Author[] = [];
+		if (oldData.firstName || oldData.lastName) {
+			authors.push({
+				firstName: oldData.firstName || '',
+				lastName: oldData.lastName || '',
+				qualifications: oldData.qualifications || '',
+				qualificationsBold: [] // No bold info in legacy data
+			});
+		}
+
+		return {
+			isOrganization: false,
+			organizationName: '',
+			authors,
+			date: oldData.date || '',
+			articleTitle: oldData.articleTitle || '',
+			source: oldData.source || '',
+			url: oldData.url || '',
+			dateOfAccess: oldData.dateOfAccess || new Date().toLocaleDateString('en-US', {
+				month: '2-digit',
+				day: '2-digit',
+				year: '2-digit'
+			}),
+			code: oldData.code || loadCode(),
+			pageNumber: oldData.pageNumber || ''
+		};
+	}
+
 	let url = $state('');
 	let sourceText = $state('');
 	let isExtracting = $state(false);
@@ -29,9 +66,14 @@
 	let metadataWasAIExtracted = $state(false);
 
 	let citation = $state<CitationData>({
-		firstName: '',
-		lastName: '',
-		qualifications: '',
+		isOrganization: false,
+		organizationName: '',
+		authors: [{
+			firstName: '',
+			lastName: '',
+			qualifications: '',
+			qualificationsBold: []
+		}],
 		date: '',
 		articleTitle: '',
 		source: '',
@@ -55,6 +97,25 @@
 	let selectionStart = $state(0);
 	let selectionEnd = $state(0);
 
+	function addAuthor() {
+		citation.authors = [...citation.authors, {
+			firstName: '',
+			lastName: '',
+			qualifications: '',
+			qualificationsBold: []
+		}];
+	}
+
+	function removeAuthor(index: number) {
+		if (citation.authors.length > 1) {
+			citation.authors = citation.authors.filter((_, i) => i !== index);
+		}
+	}
+
+	function toggleOrganization() {
+		citation.isOrganization = !citation.isOrganization;
+	}
+
 	async function handleUrlBlur() {
 		if (!url || url === citation.url) return;
 
@@ -70,13 +131,32 @@
 			}
 
 			if (metadata.author) {
-				// Try to split name
-				const nameParts = metadata.author.trim().split(' ');
-				if (nameParts.length >= 2) {
-					citation.firstName = nameParts.slice(0, -1).join(' ');
-					citation.lastName = nameParts[nameParts.length - 1];
-				} else {
-					citation.firstName = metadata.author;
+				// Split by semicolons to handle multiple authors
+				const authorStrings = metadata.author.split(';').map(a => a.trim()).filter(a => a);
+				const newAuthors: Author[] = [];
+
+				for (const authorString of authorStrings) {
+					// Try to split name
+					const nameParts = authorString.trim().split(' ');
+					const author: Author = {
+						firstName: '',
+						lastName: '',
+						qualifications: metadata.qualifications || '',
+						qualificationsBold: []
+					};
+
+					if (nameParts.length >= 2) {
+						author.firstName = nameParts.slice(0, -1).join(' ');
+						author.lastName = nameParts[nameParts.length - 1];
+					} else {
+						author.firstName = authorString;
+					}
+
+					newAuthors.push(author);
+				}
+
+				if (newAuthors.length > 0) {
+					citation.authors = newAuthors;
 				}
 			}
 
@@ -86,10 +166,6 @@
 
 			if (metadata.date) {
 				citation.date = metadata.date;
-			}
-
-			if (metadata.qualifications) {
-				citation.qualifications = metadata.qualifications;
 			}
 
 			// Show warning if AI was used
@@ -211,9 +287,9 @@
 
 	function generateCitationHtml(): string {
 		const {
-			firstName,
-			lastName,
-			qualifications,
+			isOrganization,
+			organizationName,
+			authors,
 			date,
 			articleTitle,
 			source,
@@ -225,50 +301,95 @@
 
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
 
-		// If both lastName and pageNumber are present, start with "LastName <page>" in bold
-		if (lastName && pageNumber) {
-			html += `<strong>${lastName} ${pageNumber}</strong>`;
-
-			// Add firstName after a space (not bold when page number is present)
-			if (firstName) {
-				html += ` ${firstName}`;
-			}
-		} else if (lastName && firstName) {
-			// If we have both names but no page number: Last, First (bold last name only)
-			html += `<strong>${lastName}</strong>, ${firstName}`;
+		// Handle organization mode
+		if (isOrganization) {
+			html += `<strong>${organizationName}</strong>`;
 		} else {
-			// Fallback: just firstName with first word bold
-			// Split firstName to handle middle initials (e.g., "Michael J." -> bold only "Michael")
-			const firstNameParts = firstName.trim().split(' ');
-			const onlyFirstName = firstNameParts[0];
-			const restOfFirstName = firstNameParts.slice(1).join(' ');
+			// Handle individual authors
+			// Format: Author 1 (Quals); Author 2 (Quals); Author 3 (Quals) Date
+			for (let i = 0; i < authors.length; i++) {
+				const author = authors[i];
+				const { firstName, lastName, qualifications, qualificationsBold } = author;
 
-			// Name (only first name word in bold, rest normal)
-			html += `<strong>${onlyFirstName}</strong>`;
-			if (restOfFirstName) {
-				html += ` ${restOfFirstName}`;
-			}
-			if (lastName) {
-				html += ` ${lastName}`;
+				if (i > 0) {
+					html += '; ';
+				}
+
+				// Name formatting (same logic as before, but for each author)
+				if (lastName && pageNumber && i === 0) {
+					// Only apply page number logic to first author
+					html += `<strong>${lastName} ${pageNumber}</strong>`;
+					if (firstName) {
+						html += ` ${firstName}`;
+					}
+				} else if (lastName && firstName) {
+					html += `<strong>${lastName}</strong>, ${firstName}`;
+				} else if (firstName) {
+					// Fallback: just firstName with first word bold
+					const firstNameParts = firstName.trim().split(' ');
+					const onlyFirstName = firstNameParts[0];
+					const restOfFirstName = firstNameParts.slice(1).join(' ');
+
+					html += `<strong>${onlyFirstName}</strong>`;
+					if (restOfFirstName) {
+						html += ` ${restOfFirstName}`;
+					}
+					if (lastName) {
+						html += ` ${lastName}`;
+					}
+				}
+
+				// Qualifications with selective bolding
+				if (qualifications) {
+					html += ' (';
+
+					// Build qualifications HTML with selective bolding
+					let currentBold = false;
+					for (let j = 0; j < qualifications.length; j++) {
+						const char = qualifications[j];
+						const isBold = qualificationsBold[j] || false;
+
+						if (isBold !== currentBold) {
+							if (currentBold) {
+								html += '</strong>';
+							}
+							if (isBold) {
+								html += '<strong>';
+							}
+							currentBold = isBold;
+						}
+
+						// Escape HTML characters
+						const escaped = char
+							.replace(/&/g, '&amp;')
+							.replace(/</g, '&lt;')
+							.replace(/>/g, '&gt;')
+							.replace(/"/g, '&quot;')
+							.replace(/'/g, '&#039;');
+
+						html += escaped;
+					}
+
+					if (currentBold) {
+						html += '</strong>';
+					}
+
+					html += ')';
+				}
 			}
 		}
 
-		// Qualifications
-		if (qualifications) {
-			html += ` (<strong>${qualifications}</strong>)`;
-		}
-
-		// Date (only year is bold)
+		// Date (only year is bold) - comes after all authors
 		if (date) {
 			// Try to extract year and bold only that
 			const yearMatch = date.match(/\b(\d{4})\b/);
 			if (yearMatch) {
 				const year = yearMatch[1];
 				const dateWithBoldYear = date.replace(year, `<strong>${year}</strong>`);
-				html += `; ${dateWithBoldYear}`;
+				html += ` ${dateWithBoldYear}`;
 			} else {
 				// If no year found, just add the date as-is
-				html += `; ${date}`;
+				html += ` ${date}`;
 			}
 		}
 
@@ -383,47 +504,116 @@
 			/>
 		</div>
 
-		<div class="grid gap-4 md:grid-cols-2" data-intro="citation-fields">
-			<div>
-				<label class="mb-1 block font-semibold">
-					First Name<span class="text-red-500">*</span>
-					{#if metadataWasAIExtracted}
-						<span
-							class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
-							title="Extracted using AI"
-						>
-							<Sparkles size={12} />
-							AI
-						</span>
-					{/if}
+		<div class="mb-4">
+			<div class="mb-4 flex items-center gap-4">
+				<span class="font-semibold">Author Type:</span>
+				<label class="flex items-center gap-2">
+					<input
+						type="radio"
+						checked={!citation.isOrganization}
+						onchange={() => citation.isOrganization = false}
+						name="authorType"
+					/>
+					Individual Authors
 				</label>
-				<input
-					type="text"
-					bind:value={citation.firstName}
-					placeholder="Michael"
-					class="w-full rounded border border-gray-300 px-3 py-2"
-				/>
+				<label class="flex items-center gap-2">
+					<input
+						type="radio"
+						checked={citation.isOrganization}
+						onchange={() => citation.isOrganization = true}
+						name="authorType"
+					/>
+					Organization
+				</label>
 			</div>
 
-			<div>
-				<label class="mb-1 block font-semibold">Last Name</label>
-				<input
-					type="text"
-					bind:value={citation.lastName}
-					placeholder="Mazarr"
-					class="w-full rounded border border-gray-300 px-3 py-2"
-				/>
-			</div>
+			{#if citation.isOrganization}
+				<div>
+					<label class="mb-1 block font-semibold">Organization Name<span class="text-red-500">*</span></label>
+					<input
+						type="text"
+						bind:value={citation.organizationName}
+						placeholder="RAND Corporation"
+						class="w-full rounded border border-gray-300 px-3 py-2"
+					/>
+				</div>
+			{:else}
+				<div class="space-y-6" data-intro="citation-fields">
+					{#each citation.authors as author, index (index)}
+						<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+							<div class="mb-2 flex items-center justify-between">
+								<h3 class="font-semibold">
+									Author {index + 1}
+									{#if metadataWasAIExtracted && index === 0}
+										<span
+											class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
+											title="Extracted using AI"
+										>
+											<Sparkles size={12} />
+											AI
+										</span>
+									{/if}
+								</h3>
+								{#if citation.authors.length > 1}
+									<button
+										onclick={() => removeAuthor(index)}
+										class="rounded bg-red-500 p-1 text-white hover:bg-red-600"
+										type="button"
+										title="Remove author"
+									>
+										<X size={16} />
+									</button>
+								{/if}
+							</div>
 
-			<div class="md:col-span-2">
-				<label class="mb-1 block font-semibold">Author Qualifications</label>
-				<input
-					type="text"
-					bind:value={citation.qualifications}
-					placeholder="Senior Political Scientist at the RAND Corporation"
-					class="w-full rounded border border-gray-300 px-3 py-2"
-				/>
-			</div>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div>
+									<label class="mb-1 block font-semibold">
+										First Name{#if index === 0}<span class="text-red-500">*</span>{/if}
+									</label>
+									<input
+										type="text"
+										bind:value={author.firstName}
+										placeholder="Michael"
+										class="w-full rounded border border-gray-300 px-3 py-2"
+									/>
+								</div>
+
+								<div>
+									<label class="mb-1 block font-semibold">Last Name</label>
+									<input
+										type="text"
+										bind:value={author.lastName}
+										placeholder="Mazarr"
+										class="w-full rounded border border-gray-300 px-3 py-2"
+									/>
+								</div>
+							</div>
+
+							<div class="mt-4">
+								<label class="mb-1 block font-semibold">Qualifications</label>
+								<QualificationInput
+									bind:value={author.qualifications}
+									bind:boldArray={author.qualificationsBold}
+									placeholder="Senior Political Scientist at the RAND Corporation"
+								/>
+							</div>
+						</div>
+					{/each}
+
+					<button
+						onclick={addAuthor}
+						class="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+						type="button"
+					>
+						<Plus size={16} />
+						Add Author
+					</button>
+				</div>
+			{/if}
+		</div>
+
+		<div class="grid gap-4 md:grid-cols-2">
 
 			<div>
 				<label class="mb-1 block font-semibold">Date</label>
@@ -546,7 +736,7 @@
 			<button
 				onclick={handleCopy}
 				class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
-				disabled={!sourceText || !citation.firstName}
+				disabled={!sourceText || (citation.isOrganization ? !citation.organizationName : !citation.authors[0]?.firstName)}
 			>
 				{copySuccess ? 'Copied!' : 'Copy to Clipboard'}
 			</button>
