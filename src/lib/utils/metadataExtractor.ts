@@ -1,9 +1,11 @@
-import type { ExtractedMetadata, AIConfig } from '$lib/types';
+import type { ExtractedMetadata, AIConfig, ExaConfig } from '$lib/types';
 import { extractMetadataWithAI } from './aiMetadataExtractor';
+import { findMissingMetadata } from './agenticMetadataExtractor';
 
 export async function extractMetadata(
 	url: string,
-	aiConfig?: AIConfig
+	aiConfig?: AIConfig,
+	exaConfig?: ExaConfig
 ): Promise<ExtractedMetadata> {
 	try {
 		// Call the server-side API endpoint to fetch and parse metadata
@@ -68,6 +70,39 @@ export async function extractMetadata(
 			} catch (aiError) {
 				console.error('AI extraction failed, using algorithmic results:', aiError);
 				// Continue with algorithmic results
+			}
+		}
+
+		// Step 3: Agentic web search with Exa (final fallback for missing fields)
+		const needsExaSearch = exaConfig &&
+			exaConfig.enabled &&
+			exaConfig.apiKey &&
+			aiConfig &&
+			aiConfig.provider !== 'none' &&
+			aiConfig.apiKey &&
+			(!metadata.author || !metadata.qualifications || !metadata.date);
+
+		if (needsExaSearch) {
+			try {
+				console.log('[Metadata Extractor] Using Exa agentic search for missing fields...');
+				const agenticMetadata = await findMissingMetadata(url, metadata, aiConfig, exaConfig);
+
+				// Only use agentic data for missing fields
+				if (!metadata.author && agenticMetadata.author) {
+					metadata.author = agenticMetadata.author;
+					metadata.aiExtracted = true;
+				}
+				if (!metadata.qualifications && agenticMetadata.qualifications) {
+					metadata.qualifications = agenticMetadata.qualifications;
+					metadata.aiExtracted = true;
+				}
+				if (!metadata.date && agenticMetadata.date) {
+					metadata.date = agenticMetadata.date;
+					metadata.aiExtracted = true;
+				}
+			} catch (exaError) {
+				console.error('Exa agentic search failed:', exaError);
+				// Continue with current results
 			}
 		}
 
