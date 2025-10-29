@@ -385,7 +385,12 @@
 
 				// Qualifications with selective bolding
 				if (qualifications) {
-					html += ' (';
+					// For more than 2 authors, wrap qualifications in a span with 8pt font size
+					if (authors.length > 2) {
+						html += ' <span style="font-size: 8pt;">(';
+					} else {
+						html += ' (';
+					}
 
 					// Build qualifications HTML with selective bolding
 					let currentBold = false;
@@ -418,7 +423,11 @@
 						html += '</strong>';
 					}
 
-					html += ')';
+					if (authors.length > 2) {
+						html += ')</span>';
+					} else {
+						html += ')';
+					}
 				}
 			}
 		}
