@@ -44,6 +44,8 @@
 		return {
 			isOrganization: false,
 			organizationName: '',
+			organizationQualifications: '',
+			organizationQualificationsBold: [],
 			authors,
 			date: oldData.date || '',
 			articleTitle: oldData.articleTitle || '',
@@ -68,6 +70,8 @@
 	let citation = $state<CitationData>({
 		isOrganization: false,
 		organizationName: '',
+		organizationQualifications: '',
+		organizationQualificationsBold: [],
 		authors: [{
 			firstName: '',
 			lastName: '',
@@ -289,6 +293,8 @@
 		const {
 			isOrganization,
 			organizationName,
+			organizationQualifications,
+			organizationQualificationsBold,
 			authors,
 			date,
 			articleTitle,
@@ -304,6 +310,44 @@
 		// Handle organization mode
 		if (isOrganization) {
 			html += `<strong>${organizationName}</strong>`;
+
+			// Qualifications with selective bolding
+			if (organizationQualifications) {
+				html += ' (';
+
+				// Build qualifications HTML with selective bolding
+				let currentBold = false;
+				for (let j = 0; j < organizationQualifications.length; j++) {
+					const char = organizationQualifications[j];
+					const isBold = organizationQualificationsBold[j] || false;
+
+					if (isBold !== currentBold) {
+						if (currentBold) {
+							html += '</strong>';
+						}
+						if (isBold) {
+							html += '<strong>';
+						}
+						currentBold = isBold;
+					}
+
+					// Escape HTML characters
+					const escaped = char
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+						.replace(/'/g, '&#039;');
+
+					html += escaped;
+				}
+
+				if (currentBold) {
+					html += '</strong>';
+				}
+
+				html += ')';
+			}
 		} else {
 			// Handle individual authors
 			// Format: Author 1 (Quals); Author 2 (Quals); Author 3 (Quals) Date
@@ -528,14 +572,24 @@
 			</div>
 
 			{#if citation.isOrganization}
-				<div>
-					<label class="mb-1 block font-semibold">Organization Name<span class="text-red-500">*</span></label>
-					<input
-						type="text"
-						bind:value={citation.organizationName}
-						placeholder="RAND Corporation"
-						class="w-full rounded border border-gray-300 px-3 py-2"
-					/>
+				<div class="space-y-4">
+					<div>
+						<label class="mb-1 block font-semibold">Organization Name<span class="text-red-500">*</span></label>
+						<input
+							type="text"
+							bind:value={citation.organizationName}
+							placeholder="RAND Corporation"
+							class="w-full rounded border border-gray-300 px-3 py-2"
+						/>
+					</div>
+					<div>
+						<label class="mb-1 block font-semibold">Qualifications</label>
+						<QualificationInput
+							bind:value={citation.organizationQualifications}
+							bind:boldArray={citation.organizationQualificationsBold}
+							placeholder="Nonprofit global policy think tank"
+						/>
+					</div>
 				</div>
 			{:else}
 				<div class="space-y-6" data-intro="citation-fields">

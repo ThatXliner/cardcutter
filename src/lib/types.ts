@@ -8,6 +8,8 @@ export interface Author {
 export interface CitationData {
 	isOrganization: boolean;
 	organizationName: string;
+	organizationQualifications: string;
+	organizationQualificationsBold: boolean[];
 	authors: Author[];
 	// Legacy fields for backward compatibility during migration
 	firstName?: string;
