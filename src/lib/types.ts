@@ -5,13 +5,17 @@ export interface Author {
 	qualificationsBold: boolean[]; // tracks which characters in qualifications are bold
 }
 
+export type AuthorType = 'individual' | 'etal' | 'organization';
+
 export interface CitationData {
-	isOrganization: boolean;
+	authorType: AuthorType;
 	organizationName: string;
 	organizationQualifications: string;
 	organizationQualificationsBold: boolean[];
 	authors: Author[];
 	// Legacy fields for backward compatibility during migration
+	isOrganization?: boolean;
+	isEtAl?: boolean;
 	firstName?: string;
 	lastName?: string;
 	qualifications?: string;

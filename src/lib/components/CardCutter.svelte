@@ -25,9 +25,25 @@
 
 	// Migration helper for old citation data
 	function migrateLegacyCitation(oldData: any): CitationData {
-		// Check if already in new format
-		if (oldData.authors !== undefined) {
+		// Check if already in new format with authorType
+		if (oldData.authorType) {
 			return oldData;
+		}
+
+		// Migrate from boolean flags to authorType
+		let authorType: 'individual' | 'etal' | 'organization' = 'individual';
+		if (oldData.isOrganization) {
+			authorType = 'organization';
+		} else if (oldData.isEtAl) {
+			authorType = 'etal';
+		}
+
+		// Check if already has authors array
+		if (oldData.authors !== undefined) {
+			return {
+				...oldData,
+				authorType
+			};
 		}
 
 		// Convert old format to new format
@@ -42,7 +58,7 @@
 		}
 
 		return {
-			isOrganization: false,
+			authorType,
 			organizationName: '',
 			organizationQualifications: '',
 			organizationQualificationsBold: [],
@@ -68,7 +84,7 @@
 	let metadataWasAIExtracted = $state(false);
 
 	let citation = $state<CitationData>({
-		isOrganization: false,
+		authorType: 'individual',
 		organizationName: '',
 		organizationQualifications: '',
 		organizationQualificationsBold: [],
@@ -291,7 +307,7 @@
 
 	function generateCitationHtml(): string {
 		const {
-			isOrganization,
+			authorType,
 			organizationName,
 			organizationQualifications,
 			organizationQualificationsBold,
@@ -308,7 +324,7 @@
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
 
 		// Handle organization mode
-		if (isOrganization) {
+		if (authorType === 'organization') {
 			html += `<strong>${organizationName}</strong>`;
 
 			// Qualifications with selective bolding
@@ -348,6 +364,74 @@
 
 				html += ')';
 			}
+		} else if (authorType === 'etal') {
+			// Handle "et al." mode - only show first author + et al.
+			const author = authors[0];
+			const { firstName, lastName, qualifications, qualificationsBold } = author;
+
+			// Name formatting for first author
+			if (lastName && pageNumber) {
+				html += `<strong>${lastName} ${pageNumber}</strong>`;
+				if (firstName) {
+					html += ` ${firstName}`;
+				}
+			} else if (lastName && firstName) {
+				html += `<strong>${lastName}</strong>, ${firstName}`;
+			} else if (firstName) {
+				// Fallback: just firstName with first word bold
+				const firstNameParts = firstName.trim().split(' ');
+				const onlyFirstName = firstNameParts[0];
+				const restOfFirstName = firstNameParts.slice(1).join(' ');
+
+				html += `<strong>${onlyFirstName}</strong>`;
+				if (restOfFirstName) {
+					html += ` ${restOfFirstName}`;
+				}
+				if (lastName) {
+					html += ` ${lastName}`;
+				}
+			}
+
+			// Qualifications with selective bolding (8pt font)
+			if (qualifications) {
+				html += ' <span style="font-size: 8pt;">(';
+
+				// Build qualifications HTML with selective bolding
+				let currentBold = false;
+				for (let j = 0; j < qualifications.length; j++) {
+					const char = qualifications[j];
+					const isBold = qualificationsBold[j] || false;
+
+					if (isBold !== currentBold) {
+						if (currentBold) {
+							html += '</strong>';
+						}
+						if (isBold) {
+							html += '<strong>';
+						}
+						currentBold = isBold;
+					}
+
+					// Escape HTML characters
+					const escaped = char
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+						.replace(/'/g, '&#039;');
+
+					html += escaped;
+				}
+
+				if (currentBold) {
+					html += '</strong>';
+				}
+
+				html += ')</span>';
+			}
+
+			// Add "et al." in italics
+			html += ' <em>et al.</em>';
 		} else {
 			// Handle individual authors
 			// Format: Author 1 (Quals); Author 2 (Quals); Author 3 (Quals) Date
@@ -563,8 +647,10 @@
 				<label class="flex items-center gap-2">
 					<input
 						type="radio"
-						checked={!citation.isOrganization}
-						onchange={() => citation.isOrganization = false}
+						checked={citation.authorType === 'individual'}
+						onchange={() => {
+							citation.authorType = 'individual';
+						}}
 						name="authorType"
 					/>
 					Individual Authors
@@ -572,15 +658,28 @@
 				<label class="flex items-center gap-2">
 					<input
 						type="radio"
-						checked={citation.isOrganization}
-						onchange={() => citation.isOrganization = true}
+						checked={citation.authorType === 'etal'}
+						onchange={() => {
+							citation.authorType = 'etal';
+						}}
+						name="authorType"
+					/>
+					One author + et al.
+				</label>
+				<label class="flex items-center gap-2">
+					<input
+						type="radio"
+						checked={citation.authorType === 'organization'}
+						onchange={() => {
+							citation.authorType = 'organization';
+						}}
 						name="authorType"
 					/>
 					Organization
 				</label>
 			</div>
 
-			{#if citation.isOrganization}
+			{#if citation.authorType === 'organization'}
 				<div class="space-y-4">
 					<div>
 						<label class="mb-1 block font-semibold">Organization Name<span class="text-red-500">*</span></label>
@@ -598,6 +697,56 @@
 							bind:boldArray={citation.organizationQualificationsBold}
 							placeholder="Nonprofit global policy think tank"
 						/>
+					</div>
+				</div>
+			{:else if citation.authorType === 'etal'}
+				<div class="space-y-4">
+					<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+						<h3 class="mb-4 font-semibold">
+							First Author
+							{#if metadataWasAIExtracted}
+								<span
+									class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
+									title="Extracted using AI"
+								>
+									<Sparkles size={12} />
+									AI
+								</span>
+							{/if}
+						</h3>
+
+						<div class="grid gap-4 md:grid-cols-2">
+							<div>
+								<label class="mb-1 block font-semibold">
+									First Name<span class="text-red-500">*</span>
+								</label>
+								<input
+									type="text"
+									bind:value={citation.authors[0].firstName}
+									placeholder="Michael"
+									class="w-full rounded border border-gray-300 px-3 py-2"
+								/>
+							</div>
+
+							<div>
+								<label class="mb-1 block font-semibold">Last Name</label>
+								<input
+									type="text"
+									bind:value={citation.authors[0].lastName}
+									placeholder="Mazarr"
+									class="w-full rounded border border-gray-300 px-3 py-2"
+								/>
+							</div>
+						</div>
+
+						<div class="mt-4">
+							<label class="mb-1 block font-semibold">Qualifications</label>
+							<QualificationInput
+								bind:value={citation.authors[0].qualifications}
+								bind:boldArray={citation.authors[0].qualificationsBold}
+								placeholder="Senior Political Scientist at the RAND Corporation"
+							/>
+						</div>
 					</div>
 				</div>
 			{:else}
@@ -799,7 +948,7 @@
 			<button
 				onclick={handleCopy}
 				class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
-				disabled={!sourceText || (citation.isOrganization ? !citation.organizationName : !citation.authors[0]?.firstName)}
+				disabled={!sourceText || (citation.authorType === 'organization' ? !citation.organizationName : !citation.authors[0]?.firstName)}
 			>
 				{copySuccess ? 'Copied!' : 'Copy to Clipboard'}
 			</button>
