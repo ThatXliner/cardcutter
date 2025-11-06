@@ -67,11 +67,13 @@
 			articleTitle: oldData.articleTitle || '',
 			source: oldData.source || '',
 			url: oldData.url || '',
-			dateOfAccess: oldData.dateOfAccess || new Date().toLocaleDateString('en-US', {
-				month: '2-digit',
-				day: '2-digit',
-				year: '2-digit'
-			}),
+			dateOfAccess:
+				oldData.dateOfAccess ||
+				new Date().toLocaleDateString('en-US', {
+					month: '2-digit',
+					day: '2-digit',
+					year: '2-digit'
+				}),
 			code: oldData.code || loadCode(),
 			pageNumber: oldData.pageNumber || ''
 		};
@@ -88,12 +90,14 @@
 		organizationName: '',
 		organizationQualifications: '',
 		organizationQualificationsBold: [],
-		authors: [{
-			firstName: '',
-			lastName: '',
-			qualifications: '',
-			qualificationsBold: []
-		}],
+		authors: [
+			{
+				firstName: '',
+				lastName: '',
+				qualifications: '',
+				qualificationsBold: []
+			}
+		],
 		date: '',
 		articleTitle: '',
 		source: '',
@@ -118,12 +122,15 @@
 	let selectionEnd = $state(0);
 
 	function addAuthor() {
-		citation.authors = [...citation.authors, {
-			firstName: '',
-			lastName: '',
-			qualifications: '',
-			qualificationsBold: []
-		}];
+		citation.authors = [
+			...citation.authors,
+			{
+				firstName: '',
+				lastName: '',
+				qualifications: '',
+				qualificationsBold: []
+			}
+		];
 	}
 
 	function removeAuthor(index: number) {
@@ -152,7 +159,10 @@
 
 			if (metadata.author) {
 				// Split by semicolons to handle multiple authors
-				const authorStrings = metadata.author.split(';').map(a => a.trim()).filter(a => a);
+				const authorStrings = metadata.author
+					.split(';')
+					.map((a) => a.trim())
+					.filter((a) => a);
 				const newAuthors: Author[] = [];
 
 				for (const authorString of authorStrings) {
@@ -193,7 +203,8 @@
 				metadataWasAIExtracted = true;
 				toast.warning('Metadata extracted using AI - please verify accuracy', {
 					duration: 5000,
-					description: 'Author information was extracted using AI since it could not be found automatically.'
+					description:
+						'Author information was extracted using AI since it could not be found automatically.'
 				});
 			}
 		} catch (error) {
@@ -325,7 +336,12 @@
 
 		// Handle organization mode
 		if (authorType === 'organization') {
-			html += `<strong>${organizationName}</strong>`;
+			// If page number exists, include it in bold with organization name
+			if (pageNumber) {
+				html += `<strong>${pageNumber} ${organizationName}</strong>`;
+			} else {
+				html += `<strong>${organizationName}</strong>`;
+			}
 
 			// Qualifications with selective bolding
 			if (organizationQualifications) {
@@ -540,7 +556,8 @@
 
 		// Source/Publisher (only include if it's not just a URL-like string)
 		// Skip if source looks like a URL (contains protocol, starts with www, or contains a dot like "example.com")
-		const sourceIsUrl = source && (source.includes('://') || source.startsWith('www.') || source.includes('.'));
+		const sourceIsUrl =
+			source && (source.includes('://') || source.startsWith('www.') || source.includes('.'));
 		if (source && !sourceIsUrl) {
 			html += `; ${source}`;
 		}
@@ -622,9 +639,8 @@
 </script>
 
 <div class="space-y-6">
-		<h2 class="mb-4 text-xl font-bold">Source Information</h2>
+	<h2 class="mb-4 text-xl font-bold">Source Information</h2>
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
-
 		<div class="mb-4" data-intro="url-input">
 			<label class="mb-1 block font-semibold">
 				Article URL
@@ -682,7 +698,9 @@
 			{#if citation.authorType === 'organization'}
 				<div class="space-y-4">
 					<div>
-						<label class="mb-1 block font-semibold">Organization Name<span class="text-red-500">*</span></label>
+						<label class="mb-1 block font-semibold"
+							>Organization Name<span class="text-red-500">*</span></label
+						>
 						<input
 							type="text"
 							bind:value={citation.organizationName}
@@ -826,7 +844,6 @@
 		</div>
 
 		<div class="grid gap-4 md:grid-cols-2">
-
 			<div>
 				<label class="mb-1 block font-semibold">Date</label>
 				<input
@@ -948,7 +965,10 @@
 			<button
 				onclick={handleCopy}
 				class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
-				disabled={!sourceText || (citation.authorType === 'organization' ? !citation.organizationName : !citation.authors[0]?.firstName)}
+				disabled={!sourceText ||
+					(citation.authorType === 'organization'
+						? !citation.organizationName
+						: !citation.authors[0]?.firstName)}
 			>
 				{copySuccess ? 'Copied!' : 'Copy to Clipboard'}
 			</button>
