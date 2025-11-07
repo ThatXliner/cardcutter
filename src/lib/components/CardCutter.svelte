@@ -338,7 +338,7 @@
 		if (authorType === 'organization') {
 			// If page number exists, include it in bold with organization name
 			if (pageNumber) {
-				html += `<strong>${pageNumber} ${organizationName}</strong>`;
+				html += `<strong>${organizationName} ${pageNumber}</strong>`;
 			} else {
 				html += `<strong>${organizationName}</strong>`;
 			}
