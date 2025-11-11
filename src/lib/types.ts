@@ -44,13 +44,14 @@ export interface TextSegment {
 	highlightLevel: number | null; // null means no highlight
 }
 
-// Content-based highlight that moves with the text
-// Uses surrounding context to identify the specific occurrence
-export interface ContentHighlight {
-	text: string; // The actual highlighted text content
-	highlightLevel: number; 
-	contextBefore: string; // Text before the highlight (for disambiguation)
-	contextAfter: string; // Text after the highlight (for disambiguation)
+// Position-based highlight that tracks character positions
+// Positions are transformed through text edits using delta updates
+export interface PositionHighlight {
+	id: string; // Unique identifier for this highlight
+	start: number; // Start character position
+	end: number; // End character position
+	level: number; // Highlight level ID
+	text: string; // Original highlighted text (for verification)
 }
 
 export type AIProvider = 'none' | 'openai' | 'anthropic' | 'google';
