@@ -44,14 +44,45 @@ export interface TextSegment {
 	highlightLevel: number | null; // null means no highlight
 }
 
-// Position-based highlight that tracks character positions
-// Positions are transformed through text edits using delta updates
+/**
+ * Position-based highlight that tracks character positions.
+ *
+ * This uses a position-mapping approach (similar to ProseMirror's transformation system)
+ * where highlights are stored as character positions and transformed through text edits.
+ *
+ * ## How it works:
+ *
+ * 1. **Storage**: Highlights are stored as {start, end, level} positions
+ * 2. **Delta Calculation**: When text changes, we calculate:
+ *    - Where the edit occurred (position)
+ *    - How many characters were deleted
+ *    - How many characters were inserted
+ * 3. **Position Transformation**: Each highlight's positions are transformed through the delta:
+ *    - Edit before highlight → shift both start/end by delta
+ *    - Edit after highlight → no change
+ *    - Edit overlaps highlight → adjust positions or mark as deleted
+ *    - Edit inside highlight → expand to include new text
+ * 4. **Cleanup**: Highlights that are deleted or reduced to zero length are removed
+ *
+ * ## Example:
+ *
+ * Text: "the quick brown fox"
+ * Highlight: {start: 4, end: 9, level: 1, text: "quick"}  // "quick" is highlighted
+ *
+ * User inserts "very " at position 4:
+ * - Delta: {position: 4, deleteCount: 0, insertCount: 5}
+ * - Transform: start: 4+5=9, end: 9+5=14
+ * - Result: "the very quick brown fox" with "quick" still highlighted at positions 9-14
+ *
+ * This approach is much faster and more reliable than content-based searching,
+ * as it processes highlights in O(n) time and handles all edge cases deterministically.
+ */
 export interface PositionHighlight {
 	id: string; // Unique identifier for this highlight
-	start: number; // Start character position
-	end: number; // End character position
-	level: number; // Highlight level ID
-	text: string; // Original highlighted text (for verification)
+	start: number; // Start character position (inclusive)
+	end: number; // End character position (exclusive)
+	level: number; // Highlight level ID (references HighlightLevel.id)
+	text: string; // Original highlighted text (for verification/debugging)
 }
 
 export type AIProvider = 'none' | 'openai' | 'anthropic' | 'google';

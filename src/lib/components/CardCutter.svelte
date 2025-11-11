@@ -127,7 +127,20 @@
 	let previousSelectionStart = $state(0);
 	let previousSelectionEnd = $state(0);
 
-	// Calculate the delta between old and new text
+	/**
+	 * Calculate the delta (difference) between old and new text.
+	 *
+	 * This finds where the text changed by comparing character-by-character from both ends.
+	 * The delta describes what edit operation occurred: where it happened, how many characters
+	 * were deleted, and how many were inserted.
+	 *
+	 * @returns {position, deleteCount, insertCount} describing the edit operation
+	 *
+	 * @example
+	 * // User types "very " before "quick"
+	 * calculateDelta("the quick", "the very quick", ...)
+	 * // Returns: {position: 4, deleteCount: 0, insertCount: 5}
+	 */
 	function calculateDelta(oldText: string, newText: string, oldStart: number, oldEnd: number) {
 		// Find where the text diverges from the beginning
 		let changeStart = 0;
@@ -161,7 +174,34 @@
 		};
 	}
 
-	// Transform a highlight's positions through a text edit
+	/**
+	 * Transform a highlight's positions through a text edit operation.
+	 *
+	 * This is the core of the position-mapping system. Based on where the edit occurred
+	 * relative to the highlight, we calculate new positions or mark the highlight as deleted.
+	 *
+	 * ## Edge Cases Handled:
+	 *
+	 * 1. **Edit before highlight**: Shift both start/end by (insertCount - deleteCount)
+	 *    - Example: Insert "very " at pos 0, highlight at 10-15 → becomes 15-20
+	 *
+	 * 2. **Edit after highlight**: No change needed
+	 *    - Example: Insert "!" at pos 20, highlight at 10-15 → stays 10-15
+	 *
+	 * 3. **Edit completely covers highlight**: Mark as deleted
+	 *    - Example: Delete chars 8-17, highlight at 10-15 → deleted
+	 *
+	 * 4. **Edit overlaps highlight start**: Move start to end of edit
+	 *    - Example: Delete chars 8-12, highlight at 10-15 → becomes 8-11
+	 *
+	 * 5. **Edit inside highlight**: Expand highlight to include new text
+	 *    - Example: Insert "very " at pos 12, highlight at 10-15 → becomes 10-20
+	 *
+	 * 6. **Edit starts inside and extends beyond**: Truncate highlight at edit start
+	 *    - Example: Delete chars 12-20, highlight at 10-15 → becomes 10-12
+	 *
+	 * @returns {start, end, deleted} - New positions or {deleted: true} if highlight was destroyed
+	 */
 	function transformHighlightPosition(
 		start: number,
 		end: number,
@@ -250,7 +290,20 @@
 		textSegments = result;
 	}
 
-	// Handle text input and transform highlight positions
+	/**
+	 * Handle text input events and transform all highlight positions.
+	 *
+	 * This is called on every text change (typing, paste, delete, etc.).
+	 * It calculates what changed, transforms all highlights through that change,
+	 * and rebuilds the visual segments.
+	 *
+	 * ## Process:
+	 * 1. Calculate delta between previous and current text
+	 * 2. Transform each highlight's positions through the delta
+	 * 3. Filter out highlights that were deleted or became invalid
+	 * 4. Rebuild the visual segments for rendering
+	 * 5. Update previous state for next change
+	 */
 	function handleTextInput(e: Event) {
 		const newText = sourceText;
 
