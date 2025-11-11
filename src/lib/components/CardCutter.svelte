@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { CitationData, TextSegment, Author } from '$lib/types';
+	import type { CitationData, TextSegment, Author, PositionHighlight } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
@@ -117,9 +117,235 @@
 	});
 
 	let textSegments = $state<TextSegment[]>([]);
+	let highlights = $state<PositionHighlight[]>([]); // Position-based highlights that transform through edits
 	let selectedText = $state('');
 	let selectionStart = $state(0);
 	let selectionEnd = $state(0);
+
+	// Track previous state for delta calculation
+	let previousText = $state('');
+	let previousSelectionStart = $state(0);
+	let previousSelectionEnd = $state(0);
+
+	/**
+	 * Calculate the delta (difference) between old and new text.
+	 *
+	 * This finds where the text changed by comparing character-by-character from both ends.
+	 * The delta describes what edit operation occurred: where it happened, how many characters
+	 * were deleted, and how many were inserted.
+	 *
+	 * @returns {position, deleteCount, insertCount} describing the edit operation
+	 *
+	 * @example
+	 * // User types "very " before "quick"
+	 * calculateDelta("the quick", "the very quick", ...)
+	 * // Returns: {position: 4, deleteCount: 0, insertCount: 5}
+	 */
+	function calculateDelta(oldText: string, newText: string, oldStart: number, oldEnd: number) {
+		// Find where the text diverges from the beginning
+		let changeStart = 0;
+		while (
+			changeStart < oldText.length &&
+			changeStart < newText.length &&
+			oldText[changeStart] === newText[changeStart]
+		) {
+			changeStart++;
+		}
+
+		// Find where the text diverges from the end
+		let oldSuffix = 0;
+		let newSuffix = 0;
+		while (
+			oldSuffix < oldText.length - changeStart &&
+			newSuffix < newText.length - changeStart &&
+			oldText[oldText.length - 1 - oldSuffix] === newText[newText.length - 1 - newSuffix]
+		) {
+			oldSuffix++;
+			newSuffix++;
+		}
+
+		const deleteCount = oldText.length - changeStart - oldSuffix;
+		const insertCount = newText.length - changeStart - newSuffix;
+
+		return {
+			position: changeStart,
+			deleteCount,
+			insertCount
+		};
+	}
+
+	/**
+	 * Transform a highlight's positions through a text edit operation.
+	 *
+	 * This is the core of the position-mapping system. Based on where the edit occurred
+	 * relative to the highlight, we calculate new positions or mark the highlight as deleted.
+	 *
+	 * ## Edge Cases Handled:
+	 *
+	 * 1. **Edit before highlight**: Shift both start/end by (insertCount - deleteCount)
+	 *    - Example: Insert "very " at pos 0, highlight at 10-15 → becomes 15-20
+	 *
+	 * 2. **Edit after highlight**: No change needed
+	 *    - Example: Insert "!" at pos 20, highlight at 10-15 → stays 10-15
+	 *
+	 * 3. **Edit completely covers highlight**: Mark as deleted
+	 *    - Example: Delete chars 8-17, highlight at 10-15 → deleted
+	 *
+	 * 4. **Edit overlaps highlight start**: Move start to end of edit
+	 *    - Example: Delete chars 8-12, highlight at 10-15 → becomes 8-11
+	 *
+	 * 5. **Edit inside highlight**: Expand highlight to include new text
+	 *    - Example: Insert "very " at pos 12, highlight at 10-15 → becomes 10-20
+	 *
+	 * 6. **Edit starts inside and extends beyond**: Truncate highlight at edit start
+	 *    - Example: Delete chars 12-20, highlight at 10-15 → becomes 10-12
+	 *
+	 * @returns {start, end, deleted} - New positions or {deleted: true} if highlight was destroyed
+	 */
+	function transformHighlightPosition(
+		start: number,
+		end: number,
+		editPos: number,
+		deleteCount: number,
+		insertCount: number
+	): { start: number; end: number; deleted: boolean } {
+		// Edit is completely before the highlight - shift both positions
+		if (editPos + deleteCount <= start) {
+			const delta = insertCount - deleteCount;
+			return { start: start + delta, end: end + delta, deleted: false };
+		}
+
+		// Edit is completely after the highlight - no change
+		if (editPos >= end) {
+			return { start, end, deleted: false };
+		}
+
+		// Edit overlaps with or is inside the highlight
+		// Case: Edit covers entire highlight
+		if (editPos <= start && editPos + deleteCount >= end) {
+			return { start: -1, end: -1, deleted: true };
+		}
+
+		// Case: Edit overlaps highlight start
+		if (editPos <= start && editPos + deleteCount > start) {
+			const newStart = editPos + insertCount;
+			const newEnd = end - deleteCount + insertCount;
+			return { start: newStart, end: newEnd, deleted: newEnd <= newStart };
+		}
+
+		// Case: Edit is inside highlight
+		if (editPos > start && editPos + deleteCount < end) {
+			const delta = insertCount - deleteCount;
+			return { start, end: end + delta, deleted: false };
+		}
+
+		// Case: Edit starts inside and extends beyond highlight end
+		if (editPos > start && editPos < end && editPos + deleteCount >= end) {
+			return { start, end: editPos, deleted: editPos <= start };
+		}
+
+		// Fallback
+		return { start, end, deleted: false };
+	}
+
+	// Rebuild text segments from source text and position highlights
+	function rebuildSegments() {
+		if (highlights.length === 0) {
+			textSegments = [];
+			return;
+		}
+
+		// Build position map from highlights
+		const positionMap = new Map<number, number>();
+
+		for (const highlight of highlights) {
+			// Mark all positions in this highlight
+			for (let i = highlight.start; i < highlight.end && i < sourceText.length; i++) {
+				positionMap.set(i, highlight.level);
+			}
+		}
+
+		// Build segments from position map
+		const result: TextSegment[] = [];
+		let currentSegment: TextSegment | null = null;
+
+		for (let i = 0; i < sourceText.length; i++) {
+			const char = sourceText[i];
+			const highlightLevel = positionMap.get(i) ?? null;
+
+			if (!currentSegment || currentSegment.highlightLevel !== highlightLevel) {
+				if (currentSegment) {
+					result.push(currentSegment);
+				}
+				currentSegment = { text: char, highlightLevel };
+			} else {
+				currentSegment.text += char;
+			}
+		}
+
+		if (currentSegment) {
+			result.push(currentSegment);
+		}
+
+		textSegments = result;
+	}
+
+	/**
+	 * Handle text input events and transform all highlight positions.
+	 *
+	 * This is called on every text change (typing, paste, delete, etc.).
+	 * It calculates what changed, transforms all highlights through that change,
+	 * and rebuilds the visual segments.
+	 *
+	 * ## Process:
+	 * 1. Calculate delta between previous and current text
+	 * 2. Transform each highlight's positions through the delta
+	 * 3. Filter out highlights that were deleted or became invalid
+	 * 4. Rebuild the visual segments for rendering
+	 * 5. Update previous state for next change
+	 */
+	function handleTextInput(e: Event) {
+		const newText = sourceText;
+
+		// Calculate delta if text changed
+		if (newText !== previousText) {
+			const delta = calculateDelta(
+				previousText,
+				newText,
+				previousSelectionStart,
+				previousSelectionEnd
+			);
+
+			// Transform all highlight positions
+			highlights = highlights
+				.map((h) => {
+					const result = transformHighlightPosition(
+						h.start,
+						h.end,
+						delta.position,
+						delta.deleteCount,
+						delta.insertCount
+					);
+
+					if (result.deleted) {
+						return null;
+					}
+
+					return {
+						...h,
+						start: result.start,
+						end: result.end
+					};
+				})
+				.filter((h): h is PositionHighlight => h !== null && h.end > h.start);
+
+			// Rebuild segments with transformed positions
+			rebuildSegments();
+
+			// Update previous state
+			previousText = newText;
+		}
+	}
 
 	function addAuthor() {
 		citation.authors = [
@@ -217,6 +443,8 @@
 
 	function handleTextSelection(e: Event) {
 		const textarea = e.target as HTMLTextAreaElement;
+		previousSelectionStart = selectionStart;
+		previousSelectionEnd = selectionEnd;
 		selectionStart = textarea.selectionStart;
 		selectionEnd = textarea.selectionEnd;
 		selectedText = sourceText.substring(selectionStart, selectionEnd);
@@ -225,94 +453,120 @@
 	function applyHighlight(level: number) {
 		if (!selectedText || selectionStart === selectionEnd) return;
 
-		// Build a highlight map from character position to highlight level
-		const highlightMap = new Map<number, number | null>();
+		const highlightedText = selectedText;
 
-		// First, populate with existing highlights
-		let pos = 0;
-		for (const segment of textSegments) {
-			for (let i = 0; i < segment.text.length; i++) {
-				highlightMap.set(pos + i, segment.highlightLevel);
-			}
-			pos += segment.text.length;
+		// Check if there's already a highlight at this exact position
+		const existingIndex = highlights.findIndex(
+			(h) => h.start === selectionStart && h.end === selectionEnd
+		);
+
+		if (existingIndex !== -1) {
+			// Update existing highlight at this position
+			highlights[existingIndex] = {
+				...highlights[existingIndex],
+				level,
+				text: highlightedText
+			};
+		} else {
+			// Add new position highlight with unique ID
+			const newHighlight: PositionHighlight = {
+				id: `${Date.now()}-${Math.random()}`,
+				start: selectionStart,
+				end: selectionEnd,
+				level,
+				text: highlightedText
+			};
+			highlights = [...highlights, newHighlight];
 		}
 
-		// Apply the new highlight to selected positions (this overwrites existing highlights for these positions)
-		for (let i = selectionStart; i < selectionEnd; i++) {
-			highlightMap.set(i, level);
-		}
-
-		// Convert the map back to segments
-		const result: TextSegment[] = [];
-		let currentSegment: TextSegment | null = null;
-
-		for (let i = 0; i < sourceText.length; i++) {
-			const char = sourceText[i];
-			const highlight = highlightMap.get(i) ?? null;
-
-			if (!currentSegment || currentSegment.highlightLevel !== highlight) {
-				if (currentSegment) {
-					result.push(currentSegment);
-				}
-				currentSegment = { text: char, highlightLevel: highlight };
-			} else {
-				currentSegment.text += char;
-			}
-		}
-
-		if (currentSegment) {
-			result.push(currentSegment);
-		}
-
-		textSegments = result;
+		// Rebuild segments from highlights
+		rebuildSegments();
 	}
 
+	/**
+	 * Clear highlights within the selected text range.
+	 *
+	 * This removes only the selected portion of highlights, potentially splitting
+	 * a single highlight into two separate highlights if the selection is in the middle.
+	 * The text itself remains unchanged - only the highlight positions are modified.
+	 *
+	 * ## Cases handled:
+	 * 1. Selection completely covers highlight → remove entire highlight
+	 * 2. Selection overlaps start of highlight → trim highlight start
+	 * 3. Selection overlaps end of highlight → trim highlight end
+	 * 4. Selection is inside highlight → split into two highlights
+	 * 5. Selection doesn't overlap highlight → keep unchanged
+	 *
+	 * ## Example:
+	 * Text: "the quick brown fox"
+	 * Highlight: positions 4-15 (level 1) - covers "quick brown"
+	 * User selects positions 10-12 (the word "brown" start)
+	 * Result: Two highlights: [4-10] covering "quick " and [12-15] covering "own"
+	 */
 	function clearSelectedHighlights() {
 		if (!selectedText || selectionStart === selectionEnd) return;
 
-		// Build a highlight map from character position to highlight level
-		const highlightMap = new Map<number, number | null>();
+		const newHighlights: PositionHighlight[] = [];
 
-		// First, populate with existing highlights
-		let pos = 0;
-		for (const segment of textSegments) {
-			for (let i = 0; i < segment.text.length; i++) {
-				highlightMap.set(pos + i, segment.highlightLevel);
+		for (const h of highlights) {
+			// Case 1: Highlight doesn't overlap with selection - keep as-is
+			if (h.end <= selectionStart || h.start >= selectionEnd) {
+				newHighlights.push(h);
+				continue;
 			}
-			pos += segment.text.length;
-		}
 
-		// Clear highlights for selected positions
-		for (let i = selectionStart; i < selectionEnd; i++) {
-			highlightMap.set(i, null);
-		}
+			// Case 2: Selection completely covers highlight - remove it
+			if (selectionStart <= h.start && selectionEnd >= h.end) {
+				continue; // Skip this highlight
+			}
 
-		// Convert the map back to segments
-		const result: TextSegment[] = [];
-		let currentSegment: TextSegment | null = null;
+			// Case 3: Selection overlaps start of highlight - keep the end part
+			if (selectionStart <= h.start && selectionEnd < h.end) {
+				newHighlights.push({
+					...h,
+					start: selectionEnd,
+					text: sourceText.substring(selectionEnd, h.end)
+				});
+				continue;
+			}
 
-		for (let i = 0; i < sourceText.length; i++) {
-			const char = sourceText[i];
-			const highlight = highlightMap.get(i) ?? null;
+			// Case 4: Selection overlaps end of highlight - keep the start part
+			if (selectionStart > h.start && selectionEnd >= h.end) {
+				newHighlights.push({
+					...h,
+					end: selectionStart,
+					text: sourceText.substring(h.start, selectionStart)
+				});
+				continue;
+			}
 
-			if (!currentSegment || currentSegment.highlightLevel !== highlight) {
-				if (currentSegment) {
-					result.push(currentSegment);
-				}
-				currentSegment = { text: char, highlightLevel: highlight };
-			} else {
-				currentSegment.text += char;
+			// Case 5: Selection is inside highlight - split into two highlights
+			if (selectionStart > h.start && selectionEnd < h.end) {
+				// Keep the part before selection
+				newHighlights.push({
+					...h,
+					id: `${h.id}-before`,
+					end: selectionStart,
+					text: sourceText.substring(h.start, selectionStart)
+				});
+				// Keep the part after selection
+				newHighlights.push({
+					...h,
+					id: `${h.id}-after`,
+					start: selectionEnd,
+					text: sourceText.substring(selectionEnd, h.end)
+				});
 			}
 		}
 
-		if (currentSegment) {
-			result.push(currentSegment);
-		}
+		highlights = newHighlights;
 
-		textSegments = result;
+		// Rebuild segments
+		rebuildSegments();
 	}
 
 	function clearHighlights() {
+		highlights = [];
 		textSegments = [];
 	}
 
@@ -914,6 +1168,7 @@
 			bind:value={sourceText}
 			onmouseup={handleTextSelection}
 			onkeyup={handleTextSelection}
+			oninput={handleTextInput}
 			placeholder="Paste your evidence text here..."
 			class="mb-4 h-64 w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
 		></textarea>
