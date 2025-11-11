@@ -483,14 +483,83 @@
 		rebuildSegments();
 	}
 
+	/**
+	 * Clear highlights within the selected text range.
+	 *
+	 * This removes only the selected portion of highlights, potentially splitting
+	 * a single highlight into two separate highlights if the selection is in the middle.
+	 * The text itself remains unchanged - only the highlight positions are modified.
+	 *
+	 * ## Cases handled:
+	 * 1. Selection completely covers highlight → remove entire highlight
+	 * 2. Selection overlaps start of highlight → trim highlight start
+	 * 3. Selection overlaps end of highlight → trim highlight end
+	 * 4. Selection is inside highlight → split into two highlights
+	 * 5. Selection doesn't overlap highlight → keep unchanged
+	 *
+	 * ## Example:
+	 * Text: "the quick brown fox"
+	 * Highlight: positions 4-15 (level 1) - covers "quick brown"
+	 * User selects positions 10-12 (the word "brown" start)
+	 * Result: Two highlights: [4-10] covering "quick " and [12-15] covering "own"
+	 */
 	function clearSelectedHighlights() {
 		if (!selectedText || selectionStart === selectionEnd) return;
 
-		// Remove any highlights that overlap with the selection
-		highlights = highlights.filter((h) => {
-			// Keep highlights that don't overlap with selection
-			return h.end <= selectionStart || h.start >= selectionEnd;
-		});
+		const newHighlights: PositionHighlight[] = [];
+
+		for (const h of highlights) {
+			// Case 1: Highlight doesn't overlap with selection - keep as-is
+			if (h.end <= selectionStart || h.start >= selectionEnd) {
+				newHighlights.push(h);
+				continue;
+			}
+
+			// Case 2: Selection completely covers highlight - remove it
+			if (selectionStart <= h.start && selectionEnd >= h.end) {
+				continue; // Skip this highlight
+			}
+
+			// Case 3: Selection overlaps start of highlight - keep the end part
+			if (selectionStart <= h.start && selectionEnd < h.end) {
+				newHighlights.push({
+					...h,
+					start: selectionEnd,
+					text: sourceText.substring(selectionEnd, h.end)
+				});
+				continue;
+			}
+
+			// Case 4: Selection overlaps end of highlight - keep the start part
+			if (selectionStart > h.start && selectionEnd >= h.end) {
+				newHighlights.push({
+					...h,
+					end: selectionStart,
+					text: sourceText.substring(h.start, selectionStart)
+				});
+				continue;
+			}
+
+			// Case 5: Selection is inside highlight - split into two highlights
+			if (selectionStart > h.start && selectionEnd < h.end) {
+				// Keep the part before selection
+				newHighlights.push({
+					...h,
+					id: `${h.id}-before`,
+					end: selectionStart,
+					text: sourceText.substring(h.start, selectionStart)
+				});
+				// Keep the part after selection
+				newHighlights.push({
+					...h,
+					id: `${h.id}-after`,
+					start: selectionEnd,
+					text: sourceText.substring(selectionEnd, h.end)
+				});
+			}
+		}
+
+		highlights = newHighlights;
 
 		// Rebuild segments
 		rebuildSegments();
