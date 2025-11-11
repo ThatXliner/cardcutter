@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { CitationData, TextSegment, Author } from '$lib/types';
+	import type { CitationData, TextSegment, Author, ContentHighlight } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
@@ -117,9 +117,84 @@
 	});
 
 	let textSegments = $state<TextSegment[]>([]);
+	let contentHighlights = $state<ContentHighlight[]>([]); // Content-based highlights that persist across edits
 	let selectedText = $state('');
 	let selectionStart = $state(0);
 	let selectionEnd = $state(0);
+
+	// Rebuild text segments from source text and content highlights
+	function rebuildSegmentsFromHighlights() {
+		if (contentHighlights.length === 0) {
+			textSegments = [];
+			return;
+		}
+
+		// Build position map by finding each highlight using its context
+		const positionHighlights = new Map<number, number>();
+
+		for (const highlight of contentHighlights) {
+			// Try to find the highlight using context
+			const searchString = highlight.contextBefore + highlight.text + highlight.contextAfter;
+			const foundIndex = sourceText.indexOf(searchString);
+
+			if (foundIndex !== -1) {
+				// Found the context match - highlight the text portion
+				const textStart = foundIndex + highlight.contextBefore.length;
+				for (let i = 0; i < highlight.text.length; i++) {
+					positionHighlights.set(textStart + i, highlight.highlightLevel);
+				}
+			} else {
+				// Context doesn't match exactly - try partial context matching
+				// This handles cases where text near the highlight changed but the highlight itself is intact
+
+				// Try with less context (last 20 chars before, first 20 chars after)
+				const shortBefore = highlight.contextBefore.slice(-20);
+				const shortAfter = highlight.contextAfter.slice(0, 20);
+				const shortSearchString = shortBefore + highlight.text + shortAfter;
+				const shortFoundIndex = sourceText.indexOf(shortSearchString);
+
+				if (shortFoundIndex !== -1) {
+					const textStart = shortFoundIndex + shortBefore.length;
+					for (let i = 0; i < highlight.text.length; i++) {
+						positionHighlights.set(textStart + i, highlight.highlightLevel);
+					}
+				}
+				// If still not found, the highlight is lost (text was deleted/heavily modified)
+			}
+		}
+
+		// Build segments from position map
+		const result: TextSegment[] = [];
+		let currentSegment: TextSegment | null = null;
+
+		for (let i = 0; i < sourceText.length; i++) {
+			const char = sourceText[i];
+			const highlight = positionHighlights.get(i) ?? null;
+
+			if (!currentSegment || currentSegment.highlightLevel !== highlight) {
+				if (currentSegment) {
+					result.push(currentSegment);
+				}
+				currentSegment = { text: char, highlightLevel: highlight };
+			} else {
+				currentSegment.text += char;
+			}
+		}
+
+		if (currentSegment) {
+			result.push(currentSegment);
+		}
+
+		textSegments = result;
+	}
+
+	// Watch for source text changes and rebuild segments
+	$effect(() => {
+		// React to changes in sourceText or contentHighlights
+		sourceText;
+		contentHighlights;
+		rebuildSegmentsFromHighlights();
+	});
 
 	function addAuthor() {
 		citation.authors = [
@@ -225,94 +300,75 @@
 	function applyHighlight(level: number) {
 		if (!selectedText || selectionStart === selectionEnd) return;
 
-		// Build a highlight map from character position to highlight level
-		const highlightMap = new Map<number, number | null>();
+		const highlightedText = selectedText;
 
-		// First, populate with existing highlights
-		let pos = 0;
-		for (const segment of textSegments) {
-			for (let i = 0; i < segment.text.length; i++) {
-				highlightMap.set(pos + i, segment.highlightLevel);
-			}
-			pos += segment.text.length;
+		// Capture surrounding context (50 chars before and after)
+		const contextLength = 50;
+		const contextBefore = sourceText.substring(
+			Math.max(0, selectionStart - contextLength),
+			selectionStart
+		);
+		const contextAfter = sourceText.substring(
+			selectionEnd,
+			Math.min(sourceText.length, selectionEnd + contextLength)
+		);
+
+		// Check if this exact position already has a highlight (same text + context)
+		const existingIndex = contentHighlights.findIndex(
+			(h) =>
+				h.text === highlightedText &&
+				h.contextBefore === contextBefore &&
+				h.contextAfter === contextAfter
+		);
+
+		if (existingIndex !== -1) {
+			// Update existing highlight at this position
+			contentHighlights[existingIndex] = {
+				text: highlightedText,
+				highlightLevel: level,
+				contextBefore,
+				contextAfter
+			};
+		} else {
+			// Add new content highlight
+			contentHighlights = [
+				...contentHighlights,
+				{ text: highlightedText, highlightLevel: level, contextBefore, contextAfter }
+			];
 		}
 
-		// Apply the new highlight to selected positions (this overwrites existing highlights for these positions)
-		for (let i = selectionStart; i < selectionEnd; i++) {
-			highlightMap.set(i, level);
-		}
-
-		// Convert the map back to segments
-		const result: TextSegment[] = [];
-		let currentSegment: TextSegment | null = null;
-
-		for (let i = 0; i < sourceText.length; i++) {
-			const char = sourceText[i];
-			const highlight = highlightMap.get(i) ?? null;
-
-			if (!currentSegment || currentSegment.highlightLevel !== highlight) {
-				if (currentSegment) {
-					result.push(currentSegment);
-				}
-				currentSegment = { text: char, highlightLevel: highlight };
-			} else {
-				currentSegment.text += char;
-			}
-		}
-
-		if (currentSegment) {
-			result.push(currentSegment);
-		}
-
-		textSegments = result;
+		// Rebuild segments from highlights
+		rebuildSegmentsFromHighlights();
 	}
 
 	function clearSelectedHighlights() {
 		if (!selectedText || selectionStart === selectionEnd) return;
 
-		// Build a highlight map from character position to highlight level
-		const highlightMap = new Map<number, number | null>();
+		const textToClear = selectedText;
 
-		// First, populate with existing highlights
-		let pos = 0;
-		for (const segment of textSegments) {
-			for (let i = 0; i < segment.text.length; i++) {
-				highlightMap.set(pos + i, segment.highlightLevel);
-			}
-			pos += segment.text.length;
-		}
+		// Capture context to identify the specific occurrence
+		const contextLength = 50;
+		const contextBefore = sourceText.substring(
+			Math.max(0, selectionStart - contextLength),
+			selectionStart
+		);
+		const contextAfter = sourceText.substring(
+			selectionEnd,
+			Math.min(sourceText.length, selectionEnd + contextLength)
+		);
 
-		// Clear highlights for selected positions
-		for (let i = selectionStart; i < selectionEnd; i++) {
-			highlightMap.set(i, null);
-		}
+		// Remove the specific highlight at this position
+		contentHighlights = contentHighlights.filter(
+			(h) =>
+				!(h.text === textToClear && h.contextBefore === contextBefore && h.contextAfter === contextAfter)
+		);
 
-		// Convert the map back to segments
-		const result: TextSegment[] = [];
-		let currentSegment: TextSegment | null = null;
-
-		for (let i = 0; i < sourceText.length; i++) {
-			const char = sourceText[i];
-			const highlight = highlightMap.get(i) ?? null;
-
-			if (!currentSegment || currentSegment.highlightLevel !== highlight) {
-				if (currentSegment) {
-					result.push(currentSegment);
-				}
-				currentSegment = { text: char, highlightLevel: highlight };
-			} else {
-				currentSegment.text += char;
-			}
-		}
-
-		if (currentSegment) {
-			result.push(currentSegment);
-		}
-
-		textSegments = result;
+		// Rebuild segments
+		rebuildSegmentsFromHighlights();
 	}
 
 	function clearHighlights() {
+		contentHighlights = [];
 		textSegments = [];
 	}
 

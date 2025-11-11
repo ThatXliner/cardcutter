@@ -44,6 +44,15 @@ export interface TextSegment {
 	highlightLevel: number | null; // null means no highlight
 }
 
+// Content-based highlight that moves with the text
+// Uses surrounding context to identify the specific occurrence
+export interface ContentHighlight {
+	text: string; // The actual highlighted text content
+	highlightLevel: number; 
+	contextBefore: string; // Text before the highlight (for disambiguation)
+	contextAfter: string; // Text after the highlight (for disambiguation)
+}
+
 export type AIProvider = 'none' | 'openai' | 'anthropic' | 'google';
 
 export interface AIConfig {
