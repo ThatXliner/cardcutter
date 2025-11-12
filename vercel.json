@@ -1,5 +1,15 @@
 {
 	"buildCommand": "npm run build",
 	"framework": "sveltekit",
-	"devCommand": "npm run dev"
+	"devCommand": "npm run dev",
+	"rewrites": [
+		{
+			"source": "/relay-B6BQ/static/(.*)",
+			"destination": "https://us-assets.i.posthog.com/static/$1"
+		},
+		{
+			"source": "/relay-B6BQ/(.*)",
+			"destination": "https://us.i.posthog.com/$1"
+		}
+	]
 }
