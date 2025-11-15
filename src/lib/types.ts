@@ -107,3 +107,8 @@ export interface AIModelOption {
 	value: string;
 	label: string;
 }
+
+export interface ExaConfig {
+	apiKey: string;
+	enabled: boolean;
+}

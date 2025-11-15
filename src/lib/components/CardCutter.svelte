@@ -2,6 +2,7 @@
 	import type { CitationData, TextSegment, Author, PositionHighlight } from '$lib/types';
 	import { highlightConfig } from '$lib/stores/highlightConfig.svelte';
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
+	import { exaConfig } from '$lib/stores/exaConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
 	import { copyRichText } from '$lib/utils/clipboard';
 	import { toast } from 'svelte-sonner';
@@ -377,7 +378,7 @@
 		metadataWasAIExtracted = false;
 
 		try {
-			const metadata = await extractMetadata(url, aiConfig.config);
+			const metadata = await extractMetadata(url, aiConfig.config, exaConfig.config);
 
 			if (metadata.title) {
 				citation.articleTitle = metadata.title;
