@@ -1,42 +1,26 @@
 <script lang="ts">
-  import svelteLogo from '../../assets/svelte.svg'
-  import Counter from '../../lib/Counter.svelte'
+  import "../app.css";
+  import CardCutter from "../../lib/components/CardCutter.svelte";
+  import { Settings } from "lucide-svelte";
+
+  function openOptions() {
+    browser.runtime.openOptionsPage();
+  }
 </script>
 
-<main>
-  <div>
-    <a href="https://wxt.dev" target="_blank" rel="noreferrer">
-      <img src="/wxt.svg" class="logo" alt="WXT Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank" rel="noreferrer">
-      <img src={svelteLogo} class="logo svelte" alt="Svelte Logo" />
-    </a>
-  </div>
-  <h1>WXT + Svelte</h1>
+<div class="w-[600px] min-h-[700px] bg-gray-50">
+  <header class="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+    <h1 class="text-lg font-bold text-gray-900">NSDA Card Cutter</h1>
+    <button
+      onclick={openOptions}
+      class="rounded p-2 text-gray-600 hover:bg-gray-200"
+      title="Settings"
+    >
+      <Settings size={20} />
+    </button>
+  </header>
 
-  <div class="card">
-    <Counter />
-  </div>
-
-  <p class="read-the-docs">
-    Click on the WXT and Svelte logos to learn more
-  </p>
-</main>
-
-<style>
-  .logo {
-    height: 6em;
-    padding: 1.5em;
-    will-change: filter;
-    transition: filter 300ms;
-  }
-  .logo:hover {
-    filter: drop-shadow(0 0 2em #54bc4ae0);
-  }
-  .logo.svelte:hover {
-    filter: drop-shadow(0 0 2em #ff3e00aa);
-  }
-  .read-the-docs {
-    color: #888;
-  }
-</style>
+  <main class="p-4">
+    <CardCutter />
+  </main>
+</div>

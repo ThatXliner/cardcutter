@@ -1,0 +1,1369 @@
+<script lang="ts">
+	import type { CitationData, TextSegment, Author, PositionHighlight, ExtractedMetadata } from '../types';
+	import { highlightConfig } from '../stores/highlightConfig.svelte';
+	import { aiConfig } from '../stores/aiConfig.svelte';
+	import { copyRichText } from '../utils/clipboard';
+	import { getPageData } from '../utils/pageData';
+	import { extractMetadataWithAI } from '../utils/aiMetadataExtractor';
+	import { Sparkles, Plus, X } from 'lucide-svelte';
+	import QualificationInput from './QualificationInput.svelte';
+
+	// Props to allow parent to pass in initial data from page
+	interface Props {
+		initialUrl?: string;
+		initialSelectedText?: string;
+	}
+
+	let { initialUrl = '', initialSelectedText = '' }: Props = $props();
+
+	const CODE_STORAGE_KEY = 'cardcutter_user_code';
+
+	// Load code from localStorage
+	function loadCode(): string {
+		if (typeof window === 'undefined') return '';
+		const stored = localStorage.getItem(CODE_STORAGE_KEY);
+		return stored || '';
+	}
+
+	// Save code to localStorage
+	function saveCode(code: string) {
+		if (typeof window === 'undefined') return;
+		localStorage.setItem(CODE_STORAGE_KEY, code);
+	}
+
+	// Migration helper for old citation data
+	function migrateLegacyCitation(oldData: any): CitationData {
+		// Check if already in new format with authorType
+		if (oldData.authorType) {
+			return oldData;
+		}
+
+		// Migrate from boolean flags to authorType
+		let authorType: 'individual' | 'etal' | 'organization' = 'individual';
+		if (oldData.isOrganization) {
+			authorType = 'organization';
+		} else if (oldData.isEtAl) {
+			authorType = 'etal';
+		}
+
+		// Check if already has authors array
+		if (oldData.authors !== undefined) {
+			return {
+				...oldData,
+				authorType
+			};
+		}
+
+		// Convert old format to new format
+		const authors: Author[] = [];
+		if (oldData.firstName || oldData.lastName) {
+			authors.push({
+				firstName: oldData.firstName || '',
+				lastName: oldData.lastName || '',
+				qualifications: oldData.qualifications || '',
+				qualificationsBold: [] // No bold info in legacy data
+			});
+		}
+
+		return {
+			authorType,
+			organizationName: '',
+			organizationQualifications: '',
+			organizationQualificationsBold: [],
+			authors,
+			date: oldData.date || '',
+			articleTitle: oldData.articleTitle || '',
+			source: oldData.source || '',
+			url: oldData.url || '',
+			dateOfAccess:
+				oldData.dateOfAccess ||
+				new Date().toLocaleDateString('en-US', {
+					month: '2-digit',
+					day: '2-digit',
+					year: '2-digit'
+				}),
+			code: oldData.code || loadCode(),
+			pageNumber: oldData.pageNumber || ''
+		};
+	}
+
+	let url = $state(initialUrl);
+	let sourceText = $state(initialSelectedText);
+	let isExtracting = $state(false);
+	let copySuccess = $state(false);
+	let metadataWasAIExtracted = $state(false);
+
+	// Load initial page data when component mounts
+	$effect(() => {
+		async function loadInitialData() {
+			if (initialUrl) return; // Already have initial data from props
+
+			try {
+				const pageData = await getPageData();
+				url = pageData.url;
+				sourceText = pageData.selectedText;
+
+				// Auto-extract metadata if we have a URL
+				if (url) {
+					citation.url = url;
+					await extractAndApplyMetadata(pageData.metadata);
+				}
+			} catch (error) {
+				console.error('Failed to load initial page data:', error);
+			}
+		}
+
+		loadInitialData();
+	});
+
+	let citation = $state<CitationData>({
+		authorType: 'individual',
+		organizationName: '',
+		organizationQualifications: '',
+		organizationQualificationsBold: [],
+		authors: [
+			{
+				firstName: '',
+				lastName: '',
+				qualifications: '',
+				qualificationsBold: []
+			}
+		],
+		date: '',
+		articleTitle: '',
+		source: '',
+		url: '',
+		dateOfAccess: new Date().toLocaleDateString('en-US', {
+			month: '2-digit',
+			day: '2-digit',
+			year: '2-digit'
+		}),
+		code: loadCode(),
+		pageNumber: ''
+	});
+
+	// Watch for code changes and save to localStorage
+	$effect(() => {
+		saveCode(citation.code);
+	});
+
+	let textSegments = $state<TextSegment[]>([]);
+	let highlights = $state<PositionHighlight[]>([]); // Position-based highlights that transform through edits
+	let selectedText = $state('');
+	let selectionStart = $state(0);
+	let selectionEnd = $state(0);
+
+	// Track previous state for delta calculation
+	let previousText = $state('');
+	let previousSelectionStart = $state(0);
+	let previousSelectionEnd = $state(0);
+
+	/**
+	 * Calculate the delta (difference) between old and new text.
+	 *
+	 * This finds where the text changed by comparing character-by-character from both ends.
+	 * The delta describes what edit operation occurred: where it happened, how many characters
+	 * were deleted, and how many were inserted.
+	 *
+	 * @returns {position, deleteCount, insertCount} describing the edit operation
+	 *
+	 * @example
+	 * // User types "very " before "quick"
+	 * calculateDelta("the quick", "the very quick", ...)
+	 * // Returns: {position: 4, deleteCount: 0, insertCount: 5}
+	 */
+	function calculateDelta(oldText: string, newText: string, oldStart: number, oldEnd: number) {
+		// Find where the text diverges from the beginning
+		let changeStart = 0;
+		while (
+			changeStart < oldText.length &&
+			changeStart < newText.length &&
+			oldText[changeStart] === newText[changeStart]
+		) {
+			changeStart++;
+		}
+
+		// Find where the text diverges from the end
+		let oldSuffix = 0;
+		let newSuffix = 0;
+		while (
+			oldSuffix < oldText.length - changeStart &&
+			newSuffix < newText.length - changeStart &&
+			oldText[oldText.length - 1 - oldSuffix] === newText[newText.length - 1 - newSuffix]
+		) {
+			oldSuffix++;
+			newSuffix++;
+		}
+
+		const deleteCount = oldText.length - changeStart - oldSuffix;
+		const insertCount = newText.length - changeStart - newSuffix;
+
+		return {
+			position: changeStart,
+			deleteCount,
+			insertCount
+		};
+	}
+
+	/**
+	 * Transform a highlight's positions through a text edit operation.
+	 *
+	 * This is the core of the position-mapping system. Based on where the edit occurred
+	 * relative to the highlight, we calculate new positions or mark the highlight as deleted.
+	 *
+	 * ## Edge Cases Handled:
+	 *
+	 * 1. **Edit before highlight**: Shift both start/end by (insertCount - deleteCount)
+	 *    - Example: Insert "very " at pos 0, highlight at 10-15 → becomes 15-20
+	 *
+	 * 2. **Edit after highlight**: No change needed
+	 *    - Example: Insert "!" at pos 20, highlight at 10-15 → stays 10-15
+	 *
+	 * 3. **Edit completely covers highlight**: Mark as deleted
+	 *    - Example: Delete chars 8-17, highlight at 10-15 → deleted
+	 *
+	 * 4. **Edit overlaps highlight start**: Move start to end of edit
+	 *    - Example: Delete chars 8-12, highlight at 10-15 → becomes 8-11
+	 *
+	 * 5. **Edit inside highlight**: Expand highlight to include new text
+	 *    - Example: Insert "very " at pos 12, highlight at 10-15 → becomes 10-20
+	 *
+	 * 6. **Edit starts inside and extends beyond**: Truncate highlight at edit start
+	 *    - Example: Delete chars 12-20, highlight at 10-15 → becomes 10-12
+	 *
+	 * @returns {start, end, deleted} - New positions or {deleted: true} if highlight was destroyed
+	 */
+	function transformHighlightPosition(
+		start: number,
+		end: number,
+		editPos: number,
+		deleteCount: number,
+		insertCount: number
+	): { start: number; end: number; deleted: boolean } {
+		// Edit is completely before the highlight - shift both positions
+		if (editPos + deleteCount <= start) {
+			const delta = insertCount - deleteCount;
+			return { start: start + delta, end: end + delta, deleted: false };
+		}
+
+		// Edit is completely after the highlight - no change
+		if (editPos >= end) {
+			return { start, end, deleted: false };
+		}
+
+		// Edit overlaps with or is inside the highlight
+		// Case: Edit covers entire highlight
+		if (editPos <= start && editPos + deleteCount >= end) {
+			return { start: -1, end: -1, deleted: true };
+		}
+
+		// Case: Edit overlaps highlight start
+		if (editPos <= start && editPos + deleteCount > start) {
+			const newStart = editPos + insertCount;
+			const newEnd = end - deleteCount + insertCount;
+			return { start: newStart, end: newEnd, deleted: newEnd <= newStart };
+		}
+
+		// Case: Edit is inside highlight
+		if (editPos > start && editPos + deleteCount < end) {
+			const delta = insertCount - deleteCount;
+			return { start, end: end + delta, deleted: false };
+		}
+
+		// Case: Edit starts inside and extends beyond highlight end
+		if (editPos > start && editPos < end && editPos + deleteCount >= end) {
+			return { start, end: editPos, deleted: editPos <= start };
+		}
+
+		// Fallback
+		return { start, end, deleted: false };
+	}
+
+	// Rebuild text segments from source text and position highlights
+	function rebuildSegments() {
+		if (highlights.length === 0) {
+			textSegments = [];
+			return;
+		}
+
+		// Build position map from highlights
+		const positionMap = new Map<number, number>();
+
+		for (const highlight of highlights) {
+			// Mark all positions in this highlight
+			for (let i = highlight.start; i < highlight.end && i < sourceText.length; i++) {
+				positionMap.set(i, highlight.level);
+			}
+		}
+
+		// Build segments from position map
+		const result: TextSegment[] = [];
+		let currentSegment: TextSegment | null = null;
+
+		for (let i = 0; i < sourceText.length; i++) {
+			const char = sourceText[i];
+			const highlightLevel = positionMap.get(i) ?? null;
+
+			if (!currentSegment || currentSegment.highlightLevel !== highlightLevel) {
+				if (currentSegment) {
+					result.push(currentSegment);
+				}
+				currentSegment = { text: char, highlightLevel };
+			} else {
+				currentSegment.text += char;
+			}
+		}
+
+		if (currentSegment) {
+			result.push(currentSegment);
+		}
+
+		textSegments = result;
+	}
+
+	/**
+	 * Handle text input events and transform all highlight positions.
+	 *
+	 * This is called on every text change (typing, paste, delete, etc.).
+	 * It calculates what changed, transforms all highlights through that change,
+	 * and rebuilds the visual segments.
+	 *
+	 * ## Process:
+	 * 1. Calculate delta between previous and current text
+	 * 2. Transform each highlight's positions through the delta
+	 * 3. Filter out highlights that were deleted or became invalid
+	 * 4. Rebuild the visual segments for rendering
+	 * 5. Update previous state for next change
+	 */
+	function handleTextInput(e: Event) {
+		const newText = sourceText;
+
+		// Calculate delta if text changed
+		if (newText !== previousText) {
+			const delta = calculateDelta(
+				previousText,
+				newText,
+				previousSelectionStart,
+				previousSelectionEnd
+			);
+
+			// Transform all highlight positions
+			highlights = highlights
+				.map((h) => {
+					const result = transformHighlightPosition(
+						h.start,
+						h.end,
+						delta.position,
+						delta.deleteCount,
+						delta.insertCount
+					);
+
+					if (result.deleted) {
+						return null;
+					}
+
+					return {
+						...h,
+						start: result.start,
+						end: result.end
+					};
+				})
+				.filter((h): h is PositionHighlight => h !== null && h.end > h.start);
+
+			// Rebuild segments with transformed positions
+			rebuildSegments();
+
+			// Update previous state
+			previousText = newText;
+		}
+	}
+
+	function addAuthor() {
+		citation.authors = [
+			...citation.authors,
+			{
+				firstName: '',
+				lastName: '',
+				qualifications: '',
+				qualificationsBold: []
+			}
+		];
+	}
+
+	function removeAuthor(index: number) {
+		if (citation.authors.length > 1) {
+			citation.authors = citation.authors.filter((_, i) => i !== index);
+		}
+	}
+
+	function toggleOrganization() {
+		citation.isOrganization = !citation.isOrganization;
+	}
+
+	async function extractAndApplyMetadata(metadata: ExtractedMetadata) {
+		if (metadata.title) {
+			citation.articleTitle = metadata.title;
+		}
+
+		if (metadata.author) {
+			// Split by semicolons to handle multiple authors
+			const authorStrings = metadata.author
+				.split(';')
+				.map((a) => a.trim())
+				.filter((a) => a);
+
+			// Auto-detect author type
+			if (authorStrings.length === 0) {
+				// No author - keep as individual
+				citation.authorType = 'individual';
+			} else if (authorStrings.length === 1) {
+				const authorString = authorStrings[0];
+				const nameParts = authorString.trim().split(' ');
+
+				// Check if it's "et al" pattern
+				if (authorString.toLowerCase().includes('et al')) {
+					citation.authorType = 'etal';
+					// Extract first author before "et al"
+					const firstAuthorMatch = authorString.match(/^(.+?)\s+et\s+al/i);
+					if (firstAuthorMatch) {
+						const firstAuthorName = firstAuthorMatch[1].trim();
+						const parts = firstAuthorName.split(' ');
+						citation.authors = [{
+							firstName: parts.length >= 2 ? parts.slice(0, -1).join(' ') : firstAuthorName,
+							lastName: parts.length >= 2 ? parts[parts.length - 1] : '',
+							qualifications: metadata.qualifications || '',
+							qualificationsBold: []
+						}];
+					}
+				}
+				// Check if it looks like an organization (no clear first/last name split, or all caps, or contains "Inc", "Corp", etc.)
+				else if (
+					nameParts.length === 1 ||
+					authorString === authorString.toUpperCase() ||
+					/\b(Inc|Corp|Corporation|LLC|Ltd|Foundation|Institute|Agency|Department|Organization|Association|Center|Centre)\b/i.test(authorString)
+				) {
+					citation.authorType = 'organization';
+					citation.organizationName = authorString;
+					citation.organizationQualifications = metadata.qualifications || '';
+					citation.organizationQualificationsBold = [];
+				}
+				// Individual author
+				else {
+					citation.authorType = 'individual';
+					citation.authors = [{
+						firstName: nameParts.length >= 2 ? nameParts.slice(0, -1).join(' ') : authorString,
+						lastName: nameParts.length >= 2 ? nameParts[nameParts.length - 1] : '',
+						qualifications: metadata.qualifications || '',
+						qualificationsBold: []
+					}];
+				}
+			} else {
+				// Multiple authors - use et al
+				citation.authorType = 'etal';
+				const newAuthors: Author[] = [];
+
+				for (const authorString of authorStrings) {
+					const nameParts = authorString.trim().split(' ');
+					const author: Author = {
+						firstName: '',
+						lastName: '',
+						qualifications: metadata.qualifications || '',
+						qualificationsBold: []
+					};
+
+					if (nameParts.length >= 2) {
+						author.firstName = nameParts.slice(0, -1).join(' ');
+						author.lastName = nameParts[nameParts.length - 1];
+					} else {
+						author.firstName = authorString;
+					}
+
+					newAuthors.push(author);
+				}
+
+				citation.authors = newAuthors;
+			}
+		}
+
+		if (metadata.publisher) {
+			citation.source = metadata.publisher;
+		}
+
+		if (metadata.date) {
+			citation.date = metadata.date;
+		}
+
+		if (metadata.aiExtracted) {
+			metadataWasAIExtracted = true;
+		}
+	}
+
+	async function handleUrlBlur() {
+		if (!url || url === citation.url) return;
+
+		isExtracting = true;
+		citation.url = url;
+		metadataWasAIExtracted = false;
+
+		try {
+			// For the extension, we can try to get data from the current page if URL matches
+			const pageData = await getPageData();
+
+			let metadata: ExtractedMetadata = {
+				aiExtracted: false
+			};
+
+			if (pageData.url === url) {
+				// URL matches current page, use extracted data
+				metadata = pageData.metadata;
+			} else {
+				// URL is different - extract basic info from URL
+				metadata.publisher = new URL(url).hostname.replace('www.', '');
+			}
+
+			// Check if we need AI extraction
+			const publisherIsUrlLike = metadata.publisher &&
+				(metadata.publisher.includes('.') ||
+				 metadata.publisher.includes('://') ||
+				 metadata.publisher.startsWith('www.'));
+
+			const needsAI = (!metadata.author || publisherIsUrlLike) &&
+				aiConfig.isConfigured;
+
+			if (needsAI) {
+				try {
+					// For AI extraction, we need the HTML content
+					// In extension context, we can't fetch arbitrary URLs due to CORS
+					// So we can only use AI if it's the current page
+					if (pageData.url === url) {
+						const htmlContent = document.documentElement.outerHTML;
+						const aiMetadata = await extractMetadataWithAI(url, htmlContent, aiConfig.config);
+
+						// Merge AI results with existing metadata
+						if (!metadata.author && aiMetadata.author) {
+							metadata.author = aiMetadata.author;
+							metadata.aiExtracted = true;
+						}
+						if (!metadata.qualifications && aiMetadata.qualifications) {
+							metadata.qualifications = aiMetadata.qualifications;
+							metadata.aiExtracted = true;
+						}
+						if (!metadata.title && aiMetadata.title) {
+							metadata.title = aiMetadata.title;
+							metadata.aiExtracted = true;
+						}
+						if (!metadata.date && aiMetadata.date) {
+							metadata.date = aiMetadata.date;
+							metadata.aiExtracted = true;
+						}
+						if (publisherIsUrlLike && aiMetadata.publisher && !aiMetadata.publisher.includes('.')) {
+							metadata.publisher = aiMetadata.publisher;
+							metadata.aiExtracted = true;
+						}
+					}
+				} catch (aiError) {
+					console.error('AI extraction failed:', aiError);
+				}
+			}
+
+			await extractAndApplyMetadata(metadata);
+		} catch (error) {
+			console.error('Error extracting metadata:', error);
+		} finally {
+			isExtracting = false;
+		}
+	}
+
+	function handleTextSelection(e: Event) {
+		const textarea = e.target as HTMLTextAreaElement;
+		previousSelectionStart = selectionStart;
+		previousSelectionEnd = selectionEnd;
+		selectionStart = textarea.selectionStart;
+		selectionEnd = textarea.selectionEnd;
+		selectedText = sourceText.substring(selectionStart, selectionEnd);
+	}
+
+	function applyHighlight(level: number) {
+		if (!selectedText || selectionStart === selectionEnd) return;
+
+		const highlightedText = selectedText;
+
+		// Check if there's already a highlight at this exact position
+		const existingIndex = highlights.findIndex(
+			(h) => h.start === selectionStart && h.end === selectionEnd
+		);
+
+		if (existingIndex !== -1) {
+			// Update existing highlight at this position
+			highlights[existingIndex] = {
+				...highlights[existingIndex],
+				level,
+				text: highlightedText
+			};
+		} else {
+			// Add new position highlight with unique ID
+			const newHighlight: PositionHighlight = {
+				id: `${Date.now()}-${Math.random()}`,
+				start: selectionStart,
+				end: selectionEnd,
+				level,
+				text: highlightedText
+			};
+			highlights = [...highlights, newHighlight];
+		}
+
+		// Rebuild segments from highlights
+		rebuildSegments();
+	}
+
+	/**
+	 * Clear highlights within the selected text range.
+	 *
+	 * This removes only the selected portion of highlights, potentially splitting
+	 * a single highlight into two separate highlights if the selection is in the middle.
+	 * The text itself remains unchanged - only the highlight positions are modified.
+	 *
+	 * ## Cases handled:
+	 * 1. Selection completely covers highlight → remove entire highlight
+	 * 2. Selection overlaps start of highlight → trim highlight start
+	 * 3. Selection overlaps end of highlight → trim highlight end
+	 * 4. Selection is inside highlight → split into two highlights
+	 * 5. Selection doesn't overlap highlight → keep unchanged
+	 *
+	 * ## Example:
+	 * Text: "the quick brown fox"
+	 * Highlight: positions 4-15 (level 1) - covers "quick brown"
+	 * User selects positions 10-12 (the word "brown" start)
+	 * Result: Two highlights: [4-10] covering "quick " and [12-15] covering "own"
+	 */
+	function clearSelectedHighlights() {
+		if (!selectedText || selectionStart === selectionEnd) return;
+
+		const newHighlights: PositionHighlight[] = [];
+
+		for (const h of highlights) {
+			// Case 1: Highlight doesn't overlap with selection - keep as-is
+			if (h.end <= selectionStart || h.start >= selectionEnd) {
+				newHighlights.push(h);
+				continue;
+			}
+
+			// Case 2: Selection completely covers highlight - remove it
+			if (selectionStart <= h.start && selectionEnd >= h.end) {
+				continue; // Skip this highlight
+			}
+
+			// Case 3: Selection overlaps start of highlight - keep the end part
+			if (selectionStart <= h.start && selectionEnd < h.end) {
+				newHighlights.push({
+					...h,
+					start: selectionEnd,
+					text: sourceText.substring(selectionEnd, h.end)
+				});
+				continue;
+			}
+
+			// Case 4: Selection overlaps end of highlight - keep the start part
+			if (selectionStart > h.start && selectionEnd >= h.end) {
+				newHighlights.push({
+					...h,
+					end: selectionStart,
+					text: sourceText.substring(h.start, selectionStart)
+				});
+				continue;
+			}
+
+			// Case 5: Selection is inside highlight - split into two highlights
+			if (selectionStart > h.start && selectionEnd < h.end) {
+				// Keep the part before selection
+				newHighlights.push({
+					...h,
+					id: `${h.id}-before`,
+					end: selectionStart,
+					text: sourceText.substring(h.start, selectionStart)
+				});
+				// Keep the part after selection
+				newHighlights.push({
+					...h,
+					id: `${h.id}-after`,
+					start: selectionEnd,
+					text: sourceText.substring(selectionEnd, h.end)
+				});
+			}
+		}
+
+		highlights = newHighlights;
+
+		// Rebuild segments
+		rebuildSegments();
+	}
+
+	function clearHighlights() {
+		highlights = [];
+		textSegments = [];
+	}
+
+	function generateCitationHtml(): string {
+		const {
+			authorType,
+			organizationName,
+			organizationQualifications,
+			organizationQualificationsBold,
+			authors,
+			date,
+			articleTitle,
+			source,
+			url,
+			dateOfAccess,
+			code,
+			pageNumber
+		} = citation;
+
+		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
+
+		// Handle organization mode
+		if (authorType === 'organization') {
+			// If page number exists, include it in bold with organization name
+			if (pageNumber) {
+				html += `<strong>${organizationName} ${pageNumber}</strong>`;
+			} else {
+				html += `<strong>${organizationName}</strong>`;
+			}
+
+			// Qualifications with selective bolding
+			if (organizationQualifications) {
+				html += ' (';
+
+				// Build qualifications HTML with selective bolding
+				let currentBold = false;
+				for (let j = 0; j < organizationQualifications.length; j++) {
+					const char = organizationQualifications[j];
+					const isBold = organizationQualificationsBold[j] || false;
+
+					if (isBold !== currentBold) {
+						if (currentBold) {
+							html += '</strong>';
+						}
+						if (isBold) {
+							html += '<strong>';
+						}
+						currentBold = isBold;
+					}
+
+					// Escape HTML characters
+					const escaped = char
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+						.replace(/'/g, '&#039;');
+
+					html += escaped;
+				}
+
+				if (currentBold) {
+					html += '</strong>';
+				}
+
+				html += ')';
+			}
+		} else if (authorType === 'etal') {
+			// Handle "et al." mode - only show first author + et al.
+			const author = authors[0];
+			const { firstName, lastName, qualifications, qualificationsBold } = author;
+
+			// Name formatting for first author
+			if (lastName && pageNumber) {
+				html += `<strong>${lastName} ${pageNumber}</strong>`;
+				if (firstName) {
+					html += ` ${firstName}`;
+				}
+			} else if (lastName && firstName) {
+				html += `<strong>${lastName}</strong>, ${firstName}`;
+			} else if (firstName) {
+				// Fallback: just firstName with first word bold
+				const firstNameParts = firstName.trim().split(' ');
+				const onlyFirstName = firstNameParts[0];
+				const restOfFirstName = firstNameParts.slice(1).join(' ');
+
+				html += `<strong>${onlyFirstName}</strong>`;
+				if (restOfFirstName) {
+					html += ` ${restOfFirstName}`;
+				}
+				if (lastName) {
+					html += ` ${lastName}`;
+				}
+			}
+
+			// Qualifications with selective bolding (8pt font)
+			if (qualifications) {
+				html += ' <span style="font-size: 8pt;">(';
+
+				// Build qualifications HTML with selective bolding
+				let currentBold = false;
+				for (let j = 0; j < qualifications.length; j++) {
+					const char = qualifications[j];
+					const isBold = qualificationsBold[j] || false;
+
+					if (isBold !== currentBold) {
+						if (currentBold) {
+							html += '</strong>';
+						}
+						if (isBold) {
+							html += '<strong>';
+						}
+						currentBold = isBold;
+					}
+
+					// Escape HTML characters
+					const escaped = char
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+						.replace(/'/g, '&#039;');
+
+					html += escaped;
+				}
+
+				if (currentBold) {
+					html += '</strong>';
+				}
+
+				html += ')</span>';
+			}
+
+			// Add "et al." in italics
+			html += ' <em>et al.</em>';
+		} else {
+			// Handle individual authors
+			// Format: Author 1 (Quals); Author 2 (Quals); Author 3 (Quals) Date
+			for (let i = 0; i < authors.length; i++) {
+				const author = authors[i];
+				const { firstName, lastName, qualifications, qualificationsBold } = author;
+
+				if (i > 0) {
+					html += '; ';
+				}
+
+				// Name formatting (same logic as before, but for each author)
+				if (lastName && pageNumber && i === 0) {
+					// Only apply page number logic to first author
+					html += `<strong>${lastName} ${pageNumber}</strong>`;
+					if (firstName) {
+						html += ` ${firstName}`;
+					}
+				} else if (lastName && firstName) {
+					html += `<strong>${lastName}</strong>, ${firstName}`;
+				} else if (firstName) {
+					// Fallback: just firstName with first word bold
+					const firstNameParts = firstName.trim().split(' ');
+					const onlyFirstName = firstNameParts[0];
+					const restOfFirstName = firstNameParts.slice(1).join(' ');
+
+					html += `<strong>${onlyFirstName}</strong>`;
+					if (restOfFirstName) {
+						html += ` ${restOfFirstName}`;
+					}
+					if (lastName) {
+						html += ` ${lastName}`;
+					}
+				}
+
+				// Qualifications with selective bolding
+				if (qualifications) {
+					// For more than 2 authors, wrap qualifications in a span with 8pt font size
+					if (authors.length > 2) {
+						html += ' <span style="font-size: 8pt;">(';
+					} else {
+						html += ' (';
+					}
+
+					// Build qualifications HTML with selective bolding
+					let currentBold = false;
+					for (let j = 0; j < qualifications.length; j++) {
+						const char = qualifications[j];
+						const isBold = qualificationsBold[j] || false;
+
+						if (isBold !== currentBold) {
+							if (currentBold) {
+								html += '</strong>';
+							}
+							if (isBold) {
+								html += '<strong>';
+							}
+							currentBold = isBold;
+						}
+
+						// Escape HTML characters
+						const escaped = char
+							.replace(/&/g, '&amp;')
+							.replace(/</g, '&lt;')
+							.replace(/>/g, '&gt;')
+							.replace(/"/g, '&quot;')
+							.replace(/'/g, '&#039;');
+
+						html += escaped;
+					}
+
+					if (currentBold) {
+						html += '</strong>';
+					}
+
+					if (authors.length > 2) {
+						html += ')</span>';
+					} else {
+						html += ')';
+					}
+				}
+			}
+		}
+
+		// Date (only year is bold) - comes after all authors
+		if (date) {
+			// Try to extract year and bold only that
+			const yearMatch = date.match(/\b(\d{4})\b/);
+			if (yearMatch) {
+				const year = yearMatch[1];
+				const dateWithBoldYear = date.replace(year, `<strong>${year}</strong>`);
+				html += ` ${dateWithBoldYear}`;
+			} else {
+				// If no year found, just add the date as-is
+				html += ` ${date}`;
+			}
+		}
+
+		// Start bracket - everything from here goes inside brackets
+		html += ' [';
+
+		// Article title in italics (inside brackets, no semicolon before it)
+		if (articleTitle) {
+			html += `<em>${articleTitle}</em>`;
+		}
+
+		// Source/Publisher (only include if it's not just a URL-like string)
+		// Skip if source looks like a URL (contains protocol, starts with www, or contains a dot like "example.com")
+		const sourceIsUrl =
+			source && (source.includes('://') || source.startsWith('www.') || source.includes('.'));
+		if (source && !sourceIsUrl) {
+			html += `; ${source}`;
+		}
+
+		// URL always comes after source/publisher (semicolon separator)
+		if (url) {
+			html += `; ${url}`;
+		}
+
+		// Date of access (semicolon separator)
+		if (dateOfAccess) {
+			html += `; DOA ${dateOfAccess}`;
+		}
+
+		// Code (space before //)
+		if (code) {
+			html += ` //${code}`;
+		}
+
+		// Close bracket
+		html += ']';
+
+		html += '</p>';
+
+		return html;
+	}
+
+	function generateCardHtml(): string {
+		let html = generateCitationHtml();
+		html += '<p style="margin-top: 8px; font-family: Calibri, sans-serif; font-size: 8pt;">';
+
+		if (textSegments.length > 0) {
+			for (const segment of textSegments) {
+				const level = highlightConfig.levels.find((l) => l.id === segment.highlightLevel);
+
+				if (level) {
+					let style = 'font-family: Calibri, sans-serif; font-size: 8pt;';
+					if (level.bold) style += ' font-weight: bold;';
+					if (level.underline) style += ' text-decoration: underline;';
+					if (level.fontSize !== 100) style += ` font-size: ${(8 * level.fontSize) / 100}pt;`;
+					if (level.color && level.color !== '#000000') style += ` color: ${level.color};`;
+					if (level.backgroundColor && level.backgroundColor !== '#ffffff')
+						style += ` background-color: ${level.backgroundColor};`;
+
+					html += `<span style="${style}">${escapeHtml(segment.text)}</span>`;
+				} else {
+					html += escapeHtml(segment.text);
+				}
+			}
+		} else {
+			html += escapeHtml(sourceText);
+		}
+
+		html += '</p>';
+		return html;
+	}
+
+	function escapeHtml(text: string): string {
+		// Manual HTML escaping (works in both SSR and browser)
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
+	async function handleCopy() {
+		const html = generateCardHtml();
+		const success = await copyRichText(html);
+		copySuccess = success;
+
+		if (success) {
+			setTimeout(() => {
+				copySuccess = false;
+			}, 2000);
+		}
+	}
+</script>
+
+<div class="space-y-6">
+	<h2 class="mb-4 text-xl font-bold">Source Information</h2>
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+		<div class="mb-4">
+			<label class="mb-1 block font-semibold">
+				Article URL
+				{#if isExtracting}
+					<span class="text-sm font-normal text-gray-500">(Extracting metadata...)</span>
+				{/if}
+			</label>
+			<input
+				type="url"
+				bind:value={url}
+				onblur={handleUrlBlur}
+				placeholder="https://example.com/article"
+				class="w-full rounded border border-gray-300 px-3 py-2"
+			/>
+		</div>
+
+		<div class="mb-4">
+			<div class="mb-4 flex items-center gap-4">
+				<span class="font-semibold">Author Type:</span>
+				<label class="flex items-center gap-2">
+					<input
+						type="radio"
+						checked={citation.authorType === 'individual'}
+						onchange={() => {
+							citation.authorType = 'individual';
+						}}
+						name="authorType"
+					/>
+					Individual Authors
+				</label>
+				<label class="flex items-center gap-2">
+					<input
+						type="radio"
+						checked={citation.authorType === 'etal'}
+						onchange={() => {
+							citation.authorType = 'etal';
+						}}
+						name="authorType"
+					/>
+					One author + et al.
+				</label>
+				<label class="flex items-center gap-2">
+					<input
+						type="radio"
+						checked={citation.authorType === 'organization'}
+						onchange={() => {
+							citation.authorType = 'organization';
+						}}
+						name="authorType"
+					/>
+					Organization
+				</label>
+			</div>
+
+			{#if citation.authorType === 'organization'}
+				<div class="space-y-4">
+					<div>
+						<label class="mb-1 block font-semibold"
+							>Organization Name<span class="text-red-500">*</span></label
+						>
+						<input
+							type="text"
+							bind:value={citation.organizationName}
+							placeholder="RAND Corporation"
+							class="w-full rounded border border-gray-300 px-3 py-2"
+						/>
+					</div>
+					<div>
+						<label class="mb-1 block font-semibold">Qualifications</label>
+						<QualificationInput
+							bind:value={citation.organizationQualifications}
+							bind:boldArray={citation.organizationQualificationsBold}
+							placeholder="Nonprofit global policy think tank"
+						/>
+					</div>
+				</div>
+			{:else if citation.authorType === 'etal'}
+				<div class="space-y-4">
+					<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+						<h3 class="mb-4 font-semibold">
+							First Author
+							{#if metadataWasAIExtracted}
+								<span
+									class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
+									title="Extracted using AI"
+								>
+									<Sparkles size={12} />
+									AI
+								</span>
+							{/if}
+						</h3>
+
+						<div class="grid gap-4 md:grid-cols-2">
+							<div>
+								<label class="mb-1 block font-semibold">
+									First Name<span class="text-red-500">*</span>
+								</label>
+								<input
+									type="text"
+									bind:value={citation.authors[0].firstName}
+									placeholder="Michael"
+									class="w-full rounded border border-gray-300 px-3 py-2"
+								/>
+							</div>
+
+							<div>
+								<label class="mb-1 block font-semibold">Last Name</label>
+								<input
+									type="text"
+									bind:value={citation.authors[0].lastName}
+									placeholder="Mazarr"
+									class="w-full rounded border border-gray-300 px-3 py-2"
+								/>
+							</div>
+						</div>
+
+						<div class="mt-4">
+							<label class="mb-1 block font-semibold">Qualifications</label>
+							<QualificationInput
+								bind:value={citation.authors[0].qualifications}
+								bind:boldArray={citation.authors[0].qualificationsBold}
+								placeholder="Senior Political Scientist at the RAND Corporation"
+							/>
+						</div>
+					</div>
+				</div>
+			{:else}
+				<div class="space-y-6">
+					{#each citation.authors as author, index (index)}
+						<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+							<div class="mb-2 flex items-center justify-between">
+								<h3 class="font-semibold">
+									Author {index + 1}
+									{#if metadataWasAIExtracted && index === 0}
+										<span
+											class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
+											title="Extracted using AI"
+										>
+											<Sparkles size={12} />
+											AI
+										</span>
+									{/if}
+								</h3>
+								{#if citation.authors.length > 1}
+									<button
+										onclick={() => removeAuthor(index)}
+										class="rounded bg-red-500 p-1 text-white hover:bg-red-600"
+										type="button"
+										title="Remove author"
+									>
+										<X size={16} />
+									</button>
+								{/if}
+							</div>
+
+							<div class="grid gap-4 md:grid-cols-2">
+								<div>
+									<label class="mb-1 block font-semibold">
+										First Name{#if index === 0}<span class="text-red-500">*</span>{/if}
+									</label>
+									<input
+										type="text"
+										bind:value={author.firstName}
+										placeholder="Michael"
+										class="w-full rounded border border-gray-300 px-3 py-2"
+									/>
+								</div>
+
+								<div>
+									<label class="mb-1 block font-semibold">Last Name</label>
+									<input
+										type="text"
+										bind:value={author.lastName}
+										placeholder="Mazarr"
+										class="w-full rounded border border-gray-300 px-3 py-2"
+									/>
+								</div>
+							</div>
+
+							<div class="mt-4">
+								<label class="mb-1 block font-semibold">Qualifications</label>
+								<QualificationInput
+									bind:value={author.qualifications}
+									bind:boldArray={author.qualificationsBold}
+									placeholder="Senior Political Scientist at the RAND Corporation"
+								/>
+							</div>
+						</div>
+					{/each}
+
+					<button
+						onclick={addAuthor}
+						class="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+						type="button"
+					>
+						<Plus size={16} />
+						Add Author
+					</button>
+				</div>
+			{/if}
+		</div>
+
+		<div class="grid gap-4 md:grid-cols-2">
+			<div>
+				<label class="mb-1 block font-semibold">Date</label>
+				<input
+					type="text"
+					bind:value={citation.date}
+					placeholder="March 2022"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+
+			<div>
+				<label class="mb-1 block font-semibold">Date of Access</label>
+				<input
+					type="text"
+					bind:value={citation.dateOfAccess}
+					placeholder="11/9/22"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+
+			<div>
+				<label class="mb-1 block font-semibold">Page Number</label>
+				<input
+					type="text"
+					bind:value={citation.pageNumber}
+					placeholder="5"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+
+			<div class="md:col-span-2">
+				<label class="mb-1 block font-semibold">Article Title</label>
+				<input
+					type="text"
+					bind:value={citation.articleTitle}
+					placeholder="Understanding Competition: Great Power Rivalry..."
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+
+			<div>
+				<label class="mb-1 block font-semibold">Source/Publisher</label>
+				<input
+					type="text"
+					bind:value={citation.source}
+					placeholder="RAND Corporation"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+
+			<div>
+				<label class="mb-1 block font-semibold">Your Code</label>
+				<input
+					type="text"
+					bind:value={citation.code}
+					placeholder="VCHS CL"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
+		</div>
+	</div>
+
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+		<h2 class="mb-4 text-xl font-bold">Evidence Text<span class="text-red-500">*</span></h2>
+
+		<textarea
+			data-intro="evidence-text"
+			bind:value={sourceText}
+			onmouseup={handleTextSelection}
+			onkeyup={handleTextSelection}
+			oninput={handleTextInput}
+			placeholder="Paste your evidence text here..."
+			class="mb-4 h-64 w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
+		></textarea>
+
+		<div class="mb-2">
+			<p class="mb-2 font-semibold">Apply Highlight Level:</p>
+			<div class="flex flex-wrap gap-2">
+				{#each highlightConfig.levels as level (level.id)}
+					<button
+						onclick={() => applyHighlight(level.id)}
+						disabled={!selectedText}
+						class="rounded px-4 py-2 disabled:opacity-50"
+						style="
+							font-weight: {level.bold ? 'bold' : 'normal'};
+							text-decoration: {level.underline ? 'underline' : 'none'};
+							background-color: {level.backgroundColor || '#e5e7eb'};
+							color: {level.color || 'black'};
+						"
+					>
+						{level.name}
+					</button>
+				{/each}
+				<button
+					onclick={clearSelectedHighlights}
+					disabled={!selectedText}
+					class="rounded bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 disabled:opacity-50"
+				>
+					Clear Selected
+				</button>
+				<button
+					onclick={clearHighlights}
+					class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+				>
+					Clear All Highlights
+				</button>
+			</div>
+		</div>
+
+		{#if selectedText}
+			<p class="mt-2 text-sm text-gray-600">
+				Selected: "{selectedText.substring(0, 50)}{selectedText.length > 50 ? '...' : ''}"
+			</p>
+		{/if}
+	</div>
+
+	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-xl font-bold">Card Preview</h2>
+			<button
+				onclick={handleCopy}
+				class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+				disabled={!sourceText ||
+					(citation.authorType === 'organization'
+						? !citation.organizationName
+						: !citation.authors[0]?.firstName)}
+			>
+				{copySuccess ? 'Copied!' : 'Copy to Clipboard'}
+			</button>
+		</div>
+
+		<div class="rounded border border-gray-200 bg-gray-50 p-4">
+			{@html generateCardHtml()}
+		</div>
+	</div>
+</div>
