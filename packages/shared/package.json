@@ -13,7 +13,6 @@
     "./components/CardCutter.svelte": "./src/components/CardCutter.svelte",
     "./utils/clipboard": "./src/utils/clipboard.ts",
     "./utils/aiMetadataExtractor": "./src/utils/aiMetadataExtractor.ts",
-    "./utils/metadataExtractor": "./src/utils/metadataExtractor.ts",
     "./utils/citation": "./src/utils/citation.ts",
     "./utils/storage": "./src/utils/storage.ts"
   },

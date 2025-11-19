@@ -1,44 +1,36 @@
-import { extractMetadataFromHtml } from '@acme/shared/utils/metadataExtractor';
+// import { defineContentScript } from 'wxt/sandbox';
 
 export default defineContentScript({
-	matches: ['<all_urls>'],
-	main() {
-		// Listen for metadata extraction requests from the popup
-		browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-			if (message.type === 'EXTRACT_METADATA') {
-				try {
-					// Get the current page's HTML
-					const html = document.documentElement.outerHTML;
-					const url = window.location.href;
+  matches: ["<all_urls>"],
+  main() {
+    // Listen for metadata extraction requests from the popup
+    browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === "EXTRACT_METADATA") {
+        try {
+          // Get the current page's HTML and URL
+          const html = document.documentElement.outerHTML;
+          const url = window.location.href;
 
-					// Extract metadata using the shared utility
-					const metadata = extractMetadataFromHtml(html, url);
+          // Send back the HTML and URL for Zotero translation
+          // The popup will handle calling translation-server with this data
+          sendResponse({
+            html,
+            url,
+          });
+        } catch (error) {
+          console.error("Content script failed to get page data:", error);
+          sendResponse({
+            html: document.documentElement.outerHTML,
+            url: window.location.href,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
 
-					// Send back the metadata and HTML (for potential AI extraction)
-					sendResponse({
-						metadata,
-						html
-					});
-				} catch (error) {
-					console.error('Content script metadata extraction failed:', error);
-					sendResponse({
-						metadata: {
-							title: document.title || '',
-							author: '',
-							qualifications: '',
-							publisher: '',
-							date: '',
-							description: ''
-						},
-						html: document.documentElement.outerHTML
-					});
-				}
+        // Return true to indicate async response
+        return true;
+      }
+    });
 
-				// Return true to indicate async response
-				return true;
-			}
-		});
-
-		console.log('Card Cutter content script loaded');
-	}
+    console.log("Card Cutter content script loaded");
+  },
 });
