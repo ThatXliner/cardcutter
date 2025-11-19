@@ -17,6 +17,12 @@
 
 	const CODE_STORAGE_KEY = 'cardcutter_user_code';
 
+	// Expose extractFromUrl method for parent components
+	export async function extractFromUrl(newUrl: string) {
+		url = newUrl;
+		await handleUrlBlur();
+	}
+
 	// Load code from localStorage
 	function loadCode(): string {
 		if (typeof window === 'undefined') return '';
@@ -91,6 +97,14 @@
 	let isExtracting = $state(false);
 	let copySuccess = $state(false);
 	let metadataWasAIExtracted = $state(false);
+
+	// Auto-extract metadata when initialUrl is provided
+	$effect(() => {
+		if (initialUrl && initialUrl !== citation.url && extractMetadata) {
+			url = initialUrl;
+			handleUrlBlur();
+		}
+	});
 
 	let citation = $state<CitationData>({
 		authorType: 'individual',

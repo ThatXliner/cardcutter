@@ -10,13 +10,14 @@
 	import { extractMetadataWithAI } from '@acme/shared/utils/aiMetadataExtractor';
 	import type { ExtractedMetadata } from '@acme/shared/types';
 	import { Toaster } from 'svelte-sonner';
-	import { Settings, Palette } from 'lucide-svelte';
+	import { Settings, Palette, Download } from 'lucide-svelte';
 
 	let initialUrl = $state('');
 	let showHighlightConfig = $state(false);
 	let showAISettings = $state(false);
 	let storesInitialized = $state(false);
 	let initError = $state<string | null>(null);
+	let cardCutterRef: any = $state(null);
 
 	// Initialize stores and get current tab URL on mount
 	onMount(async () => {
@@ -105,6 +106,21 @@
 			throw error;
 		}
 	}
+
+	// Function to extract from current page
+	async function extractFromCurrentPage() {
+		try {
+			const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+			if (tab?.url) {
+				// Update the URL in CardCutter and trigger extraction
+				if (cardCutterRef && cardCutterRef.extractFromUrl) {
+					await cardCutterRef.extractFromUrl(tab.url);
+				}
+			}
+		} catch (error) {
+			console.error('Failed to extract from current page:', error);
+		}
+	}
 </script>
 
 <Toaster />
@@ -127,6 +143,14 @@
 
 				<div class="mt-4 flex justify-center gap-3">
 					<button
+						onclick={extractFromCurrentPage}
+						class="inline-flex items-center gap-2 rounded bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+					>
+						<Download size={18} />
+						Extract from Current Page
+					</button>
+
+					<button
 						onclick={() => (showHighlightConfig = true)}
 						class="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
 					>
@@ -145,7 +169,7 @@
 			</div>
 
 			<div class="mx-auto max-w-4xl">
-				<CardCutter {extractMetadata} {initialUrl} />
+				<CardCutter bind:this={cardCutterRef} {extractMetadata} {initialUrl} />
 			</div>
 		</div>
 	</div>
