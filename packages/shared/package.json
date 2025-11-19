@@ -1,0 +1,33 @@
+{
+	"name": "@acme/shared",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"exports": {
+		"./types": "./src/types.ts",
+		"./stores/highlightConfig": "./src/stores/highlightConfig.svelte.ts",
+		"./stores/aiConfig": "./src/stores/aiConfig.svelte.ts",
+		"./components/QualificationInput.svelte": "./src/components/QualificationInput.svelte",
+		"./components/HighlightConfig.svelte": "./src/components/HighlightConfig.svelte",
+		"./components/AISettings.svelte": "./src/components/AISettings.svelte",
+		"./components/CardCutter.svelte": "./src/components/CardCutter.svelte",
+		"./utils/clipboard": "./src/utils/clipboard.ts",
+		"./utils/aiMetadataExtractor": "./src/utils/aiMetadataExtractor.ts",
+		"./utils/citation": "./src/utils/citation.ts",
+		"./utils/storage": "./src/utils/storage.ts"
+	},
+	"peerDependencies": {
+		"svelte": "^5.0.0"
+	},
+	"dependencies": {
+		"@ai-sdk/anthropic": "^2.0.25",
+		"@ai-sdk/google": "^2.0.18",
+		"@ai-sdk/openai": "^2.0.46",
+		"ai": "^5.0.65",
+		"lucide-svelte": "^0.545.0",
+		"svelte-sonner": "^1.0.5"
+	},
+	"devDependencies": {
+		"typescript": "^5.0.0"
+	}
+}
