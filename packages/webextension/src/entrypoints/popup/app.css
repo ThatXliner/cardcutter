@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source "../../../node_modules/@acme/shared/src/**/*.svelte";
+
 body {
     margin: 0;
     padding: 0;
