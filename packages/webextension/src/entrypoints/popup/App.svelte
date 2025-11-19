@@ -16,25 +16,42 @@
 	let showHighlightConfig = $state(false);
 	let showAISettings = $state(false);
 	let storesInitialized = $state(false);
+	let initError = $state<string | null>(null);
 
 	// Initialize stores and get current tab URL on mount
 	onMount(async () => {
-		// Set up browser storage adapter
-		setStorageAdapter(browserStorageAdapter);
-
-		// Initialize stores
-		await highlightConfig.init();
-		await aiConfig.init();
-		storesInitialized = true;
-
-		// Get current tab URL
 		try {
-			const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-			if (tab?.url) {
-				initialUrl = tab.url;
+			console.log('Starting initialization...');
+			console.log('browser available?', typeof browser !== 'undefined');
+			console.log('browser.storage available?', typeof browser !== 'undefined' && browser.storage);
+
+			// Set up browser storage adapter
+			setStorageAdapter(browserStorageAdapter);
+			console.log('Storage adapter set');
+
+			// Initialize stores
+			await highlightConfig.init();
+			console.log('Highlight config initialized');
+
+			await aiConfig.init();
+			console.log('AI config initialized');
+
+			storesInitialized = true;
+			console.log('Stores initialized successfully');
+
+			// Get current tab URL
+			try {
+				const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+				if (tab?.url) {
+					initialUrl = tab.url;
+					console.log('Got tab URL:', initialUrl);
+				}
+			} catch (error) {
+				console.error('Failed to get current tab:', error);
 			}
 		} catch (error) {
-			console.error('Failed to get current tab:', error);
+			console.error('Initialization failed:', error);
+			initError = error instanceof Error ? error.message : 'Unknown error';
 		}
 	});
 
@@ -92,33 +109,49 @@
 
 <Toaster />
 
-{#if storesInitialized}
-	<div class="h-screen overflow-auto bg-gray-50 p-4">
-		<div class="mb-4 flex items-center justify-between">
-			<h1 class="text-2xl font-bold">Card Cutter</h1>
-			<div class="flex gap-2">
-				<button
-					onclick={() => (showAISettings = true)}
-					class="rounded bg-purple-600 p-2 text-white hover:bg-purple-700"
-					title="AI Settings"
-				>
-					<Settings size={20} />
-				</button>
-				<button
-					onclick={() => (showHighlightConfig = true)}
-					class="rounded bg-blue-600 p-2 text-white hover:bg-blue-700"
-					title="Highlight Configuration"
-				>
-					<Palette size={20} />
-				</button>
+{#if initError}
+	<div class="flex h-screen items-center justify-center p-4">
+		<div class="text-center">
+			<p class="text-red-600 font-semibold">Initialization Error:</p>
+			<p class="text-gray-600 mt-2">{initError}</p>
+		</div>
+	</div>
+{:else if storesInitialized}
+	<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-6">
+		<div class="container mx-auto px-4">
+			<div class="mb-6 text-center">
+				<h1 class="mb-2 text-3xl font-bold text-gray-900">NSDA Debate Card Cutter</h1>
+				<p class="text-sm text-gray-600">
+					Automatically format debate evidence with citations and highlights
+				</p>
+
+				<div class="mt-4 flex justify-center gap-3">
+					<button
+						onclick={() => (showHighlightConfig = true)}
+						class="inline-flex items-center gap-2 rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+					>
+						<Palette size={18} />
+						Configure Highlight Levels
+					</button>
+
+					<button
+						onclick={() => (showAISettings = true)}
+						class="inline-flex items-center gap-2 rounded bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700"
+					>
+						<Settings size={18} />
+						AI Settings
+					</button>
+				</div>
+			</div>
+
+			<div class="mx-auto max-w-4xl">
+				<CardCutter {extractMetadata} {initialUrl} />
 			</div>
 		</div>
-
-		<CardCutter {extractMetadata} {initialUrl} />
-
-		<HighlightConfig bind:open={showHighlightConfig} />
-		<AISettings bind:open={showAISettings} />
 	</div>
+
+	<HighlightConfig bind:open={showHighlightConfig} />
+	<AISettings bind:open={showAISettings} />
 {:else}
 	<div class="flex h-screen items-center justify-center">
 		<p class="text-gray-600">Loading...</p>

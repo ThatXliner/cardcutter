@@ -929,7 +929,7 @@
 		</div>
 
 		<div class="rounded border border-gray-200 bg-gray-50 p-4">
-			{@html generateCardHtml()}
+			{@html generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels)}
 		</div>
 	</div>
 </div>
