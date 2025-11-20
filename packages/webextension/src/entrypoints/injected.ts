@@ -8,15 +8,19 @@ import { extractMetadata } from "ztractor";
 export default defineUnlistedScript(() => {
   // Listen for extraction requests from content script
   window.addEventListener("message", async (event) => {
-    // Only accept messages from same origin
-    if (event.source !== window) return;
-
     if (event.data.type === "CARDCUTTER_EXTRACT_ZTRACTOR") {
       const { url, html, requestId } = event.data.payload;
 
       try {
-        console.log("[Injected Script] 🔍 Starting metadata extraction for:", url);
-        console.log("[Injected Script] 📄 HTML length:", html?.length || 0, "characters");
+        console.log(
+          "[Injected Script] 🔍 Starting metadata extraction for:",
+          url,
+        );
+        console.log(
+          "[Injected Script] 📄 HTML length:",
+          html?.length || 0,
+          "characters",
+        );
 
         // Use ztractor to extract metadata
         // DOMParser is available in page context
@@ -35,7 +39,10 @@ export default defineUnlistedScript(() => {
         });
 
         if (result.success && result.items && result.items.length > 0) {
-          console.log("[Injected Script] ✅ Successfully extracted metadata using translator:", result.translator);
+          console.log(
+            "[Injected Script] ✅ Successfully extracted metadata using translator:",
+            result.translator,
+          );
           console.log("[Injected Script] 📝 Extracted items:", result.items);
 
           // Log item details
@@ -59,11 +66,13 @@ export default defineUnlistedScript(() => {
                 translator: result.translator,
               },
             },
-            "*"
+            "*",
           );
         } else {
           console.warn("[Injected Script] ❌ Extraction failed:", result.error);
-          console.warn("[Injected Script] No suitable translator found for this page");
+          console.warn(
+            "[Injected Script] No suitable translator found for this page",
+          );
           window.postMessage(
             {
               type: "CARDCUTTER_EXTRACT_ZTRACTOR_RESPONSE",
@@ -73,7 +82,7 @@ export default defineUnlistedScript(() => {
                 error: result.error || "No metadata could be extracted",
               },
             },
-            "*"
+            "*",
           );
         }
       } catch (error) {
@@ -84,10 +93,13 @@ export default defineUnlistedScript(() => {
             payload: {
               requestId,
               success: false,
-              error: error instanceof Error ? error.message : "Unknown error occurred",
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error occurred",
             },
           },
-          "*"
+          "*",
         );
       }
     }
