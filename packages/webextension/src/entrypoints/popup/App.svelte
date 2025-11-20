@@ -71,35 +71,41 @@
     });
 
     // Metadata extraction function using Zotero translators
-    async function extractMetadata(url: string): Promise<ExtractedMetadata> {
+    async function extractMetadata(url: string, manualHtml?: string): Promise<ExtractedMetadata> {
         try {
             let html = "";
             let actualUrl = url;
 
-            // Get active tab
-            const [tab] = await browser.tabs.query({
-                active: true,
-                currentWindow: true,
-            });
-
-            // If the URL matches the current tab, get HTML from the page directly
-            if (tab && tab.url === url && tab.id) {
-                try {
-                    // Send message to content script to get page data
-                    const response = await browser.tabs.sendMessage(tab.id, {
-                        type: "EXTRACT_METADATA",
-                    });
-
-                    if (response) {
-                        html = response.html || "";
-                        actualUrl = response.url || url;
-                    }
-                } catch (error) {
-                    console.error("Failed to get page content from content script:", error);
-                    throw new Error("Could not get page content. Make sure you're on a web page (not a browser page like chrome:// or about:)");
-                }
+            // If manual HTML is provided, use it directly
+            if (manualHtml) {
+                html = manualHtml;
+                actualUrl = url;
             } else {
-                throw new Error("URL doesn't match current tab. Please navigate to the page you want to extract from.");
+                // Get active tab
+                const [tab] = await browser.tabs.query({
+                    active: true,
+                    currentWindow: true,
+                });
+
+                // If the URL matches the current tab, get HTML from the page directly
+                if (tab && tab.url === url && tab.id) {
+                    try {
+                        // Send message to content script to get page data
+                        const response = await browser.tabs.sendMessage(tab.id, {
+                            type: "EXTRACT_METADATA",
+                        });
+
+                        if (response) {
+                            html = response.html || "";
+                            actualUrl = response.url || url;
+                        }
+                    } catch (error) {
+                        console.error("Failed to get page content from content script:", error);
+                        throw new Error("Could not get page content. Please provide HTML manually or make sure you're on a web page (not a browser page like chrome:// or about:)");
+                    }
+                } else {
+                    throw new Error("URL doesn't match current tab. Please navigate to the page or provide HTML manually.");
+                }
             }
 
             // Extract metadata using Zotero translators (via ztractor)

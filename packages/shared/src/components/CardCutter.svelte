@@ -9,7 +9,7 @@
 	import QualificationInput from './QualificationInput.svelte';
 
 	interface Props {
-		extractMetadata?: (url: string) => Promise<ExtractedMetadata>;
+		extractMetadata?: (url: string, manualHtml?: string) => Promise<ExtractedMetadata>;
 		initialUrl?: string;
 	}
 
@@ -20,6 +20,7 @@
 	// Expose extractFromUrl method for parent components
 	export async function extractFromUrl(newUrl: string) {
 		url = newUrl;
+		// Trigger extraction when explicitly called
 		await handleUrlBlur();
 	}
 
@@ -97,6 +98,9 @@
 	let isExtracting = $state(false);
 	let copySuccess = $state(false);
 	let metadataWasAIExtracted = $state(false);
+	let manualHtml = $state('');
+	let showManualHtmlInput = $state(false);
+	let extractionError = $state<string | null>(null);
 
 	// Auto-extract metadata when initialUrl is provided
 	$effect(() => {
@@ -396,9 +400,10 @@
 		isExtracting = true;
 		citation.url = url;
 		metadataWasAIExtracted = false;
+		extractionError = null;
 
 		try {
-			const metadata = await extractMetadata(url);
+			const metadata = await extractMetadata(url, manualHtml || undefined);
 
 			if (metadata.title) {
 				citation.articleTitle = metadata.title;
@@ -456,7 +461,17 @@
 			}
 		} catch (error) {
 			console.error('Error extracting metadata:', error);
-			toast.error('Failed to extract metadata from URL');
+			extractionError = error instanceof Error ? error.message : 'Failed to extract metadata';
+
+			// If extraction failed and we haven't shown manual HTML input yet, offer it
+			if (!manualHtml && !showManualHtmlInput) {
+				showManualHtmlInput = true;
+				toast.error('Extraction failed. Please provide HTML manually.', {
+					duration: 5000
+				});
+			} else {
+				toast.error('Failed to extract metadata from URL');
+			}
 		} finally {
 			isExtracting = false;
 		}
@@ -615,14 +630,71 @@
 					<span class="text-sm font-normal text-gray-500">(Extracting metadata...)</span>
 				{/if}
 			</label>
-			<input
-				type="url"
-				bind:value={url}
-				onblur={handleUrlBlur}
-				placeholder="https://example.com/article"
-				class="w-full rounded border border-gray-300 px-3 py-2"
-			/>
+			<div class="flex gap-2">
+				<input
+					type="url"
+					bind:value={url}
+					placeholder="https://example.com/article"
+					class="flex-1 rounded border border-gray-300 px-3 py-2"
+				/>
+				<button
+					onclick={handleUrlBlur}
+					disabled={!url || isExtracting}
+					class="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+					type="button"
+				>
+					{isExtracting ? 'Extracting...' : 'Extract'}
+				</button>
+			</div>
+			{#if extractionError}
+				<p class="mt-2 text-sm text-red-600">{extractionError}</p>
+			{/if}
 		</div>
+
+		{#if showManualHtmlInput}
+			<div class="mb-4">
+				<div class="mb-2 flex items-center justify-between">
+					<label class="block font-semibold">Manual HTML Input (Optional)</label>
+					<button
+						onclick={() => {
+							showManualHtmlInput = false;
+							manualHtml = '';
+						}}
+						class="text-sm text-gray-600 hover:text-gray-800"
+						type="button"
+					>
+						Hide
+					</button>
+				</div>
+				<p class="mb-2 text-sm text-gray-600">
+					If automatic extraction fails, paste the page's HTML here and try extracting again.
+				</p>
+				<textarea
+					bind:value={manualHtml}
+					placeholder="Paste the HTML source code here..."
+					class="h-32 w-full rounded border border-gray-300 px-3 py-2 font-mono text-xs"
+				></textarea>
+				{#if manualHtml}
+					<button
+						onclick={handleUrlBlur}
+						class="mt-2 rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+						type="button"
+					>
+						Retry Extraction with Manual HTML
+					</button>
+				{/if}
+			</div>
+		{:else}
+			<div class="mb-4">
+				<button
+					onclick={() => (showManualHtmlInput = true)}
+					class="text-sm text-blue-600 hover:text-blue-800"
+					type="button"
+				>
+					+ Provide HTML manually
+				</button>
+			</div>
+		{/if}
 
 		<div class="mb-4">
 			<div class="mb-4 flex items-center gap-4">
