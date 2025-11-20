@@ -19,6 +19,12 @@ export default defineConfig({
 		],
 		host_permissions: [
 			"<all_urls>"
+		],
+		web_accessible_resources: [
+			{
+				resources: ["injected.js"],
+				matches: ["<all_urls>"]
+			}
 		]
 	}
 });

@@ -45,15 +45,30 @@ export interface ZoteroTranslationResult {
 
 /**
  * Extract metadata from a URL using Zotero translators via ztractor
- * This function sends a message to the background script which runs ztractor
+ * This function sends a message to the content script which runs ztractor with native DOMParser
  */
 export async function extractMetadataWithZotero(
   url: string,
   html?: string
 ): Promise<ZoteroTranslationResult> {
   try {
-    // Send message to background script to run ztractor
-    const response = await browser.runtime.sendMessage({
+    // Get the active tab to send message to content script
+    const [tab] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+
+    if (!tab || !tab.id) {
+      return {
+        items: [],
+        url,
+        success: false,
+        error: 'No active tab found',
+      };
+    }
+
+    // Send message to content script to run ztractor
+    const response = await browser.tabs.sendMessage(tab.id, {
       type: 'EXTRACT_METADATA_ZTRACTOR',
       payload: { url, html },
     });

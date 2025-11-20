@@ -109,18 +109,30 @@
             }
 
             // Extract metadata using Zotero translators (via ztractor)
-            console.log("Extracting metadata with ztractor...");
+            console.log("🔍 [Popup] Starting metadata extraction with ztractor...");
+            console.log("🔗 [Popup] URL:", actualUrl);
+            console.log("📄 [Popup] HTML length:", html?.length || 0, "characters");
+
             const zoteroResult = await extractMetadataWithZotero(
                 actualUrl,
                 html,
             );
 
+            console.log("📊 [Popup] Zotero extraction result:", {
+                success: zoteroResult.success,
+                translator: zoteroResult.translator,
+                itemCount: zoteroResult.items?.length || 0,
+                error: zoteroResult.error,
+            });
+
             if (zoteroResult.success && zoteroResult.items.length > 0) {
                 const firstItem = zoteroResult.items[0];
 
+                console.log("📝 [Popup] First item:", firstItem);
+
                 // Check if extraction was successful
                 if (isZoteroExtractionSuccessful(firstItem)) {
-                    console.log("Zotero extraction successful:", firstItem);
+                    console.log("✅ [Popup] Zotero extraction successful using translator:", zoteroResult.translator);
 
                     // Map Zotero item to ExtractedMetadata
                     let metadata = mapZoteroItemToExtractedMetadata(firstItem);
@@ -140,7 +152,7 @@
 
                             if (authorNames.length > 0) {
                                 console.log(
-                                    "Extracting qualifications with AI for:",
+                                    "🤖 [Popup] Extracting qualifications with AI for:",
                                     authorNames,
                                 );
                                 const qualifications =
@@ -152,16 +164,19 @@
                                     );
 
                                 if (qualifications) {
+                                    console.log("✅ [Popup] AI extracted qualifications:", qualifications);
                                     metadata = {
                                         ...metadata,
                                         qualifications,
                                         aiExtracted: true,
                                     };
+                                } else {
+                                    console.log("ℹ️ [Popup] No AI qualifications extracted");
                                 }
                             }
                         } catch (aiError) {
                             console.error(
-                                "AI qualifications extraction failed:",
+                                "❌ [Popup] AI qualifications extraction failed:",
                                 aiError,
                             );
                             // Continue without qualifications
@@ -173,7 +188,8 @@
             }
 
             // If Zotero extraction failed, throw error
-            console.error("Metadata extraction failed:", zoteroResult.error);
+            console.error("❌ [Popup] Metadata extraction failed:", zoteroResult.error);
+            console.error("❌ [Popup] No suitable translator found for this page");
             throw new Error(
                 zoteroResult.error ||
                     "Metadata extraction failed. No translator could extract data from this page.",
