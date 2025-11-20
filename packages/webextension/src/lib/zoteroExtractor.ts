@@ -1,19 +1,12 @@
 /**
- * Zotero Translator Integration
+ * Metadata Extraction using ztractor
  *
- * This module provides metadata extraction using Zotero translators via translation-server.
- * Translation-server is a Node.js-based server that runs Zotero translators.
+ * This module provides metadata extraction using Zotero translators via the ztractor package.
+ * Ztractor bundles 600+ Zotero translators and runs them client-side without requiring
+ * an external translation-server.
  *
- * Setup: Run `docker run -d -p 1969:1969 --name translation-server zotero/translation-server`
- * Or install from: https://github.com/zotero/translation-server
+ * The extraction runs in the background script to avoid browser compatibility issues.
  */
-
-export interface ZoteroTranslationServerConfig {
-  /** URL of the translation-server instance (default: http://localhost:1969) */
-  endpoint: string;
-  /** Timeout for translation requests in milliseconds (default: 10000) */
-  timeout?: number;
-}
 
 export interface ZoteroCreator {
   creatorType: 'author' | 'editor' | 'contributor' | 'translator';
@@ -47,158 +40,45 @@ export interface ZoteroTranslationResult {
   url: string;
   success: boolean;
   error?: string;
+  translator?: string;
 }
 
 /**
- * Default translation-server configuration
- */
-const DEFAULT_CONFIG: ZoteroTranslationServerConfig = {
-  endpoint: 'http://localhost:1969',
-  timeout: 10000,
-};
-
-/**
- * Check if translation-server is available
- */
-export async function checkTranslationServerAvailable(
-  config: Partial<ZoteroTranslationServerConfig> = {}
-): Promise<boolean> {
-  const finalConfig = { ...DEFAULT_CONFIG, ...config };
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000); // Quick check with 2s timeout
-
-    const response = await fetch(finalConfig.endpoint, {
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return response.ok;
-  } catch (error) {
-    return false;
-  }
-}
-
-/**
- * Extract metadata from a URL using Zotero translators
+ * Extract metadata from a URL using Zotero translators via ztractor
+ * This function sends a message to the background script which runs ztractor
  */
 export async function extractMetadataWithZotero(
   url: string,
-  html?: string,
-  config: Partial<ZoteroTranslationServerConfig> = {}
+  html?: string
 ): Promise<ZoteroTranslationResult> {
-  const finalConfig = { ...DEFAULT_CONFIG, ...config };
-
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), finalConfig.timeout);
+    // Send message to background script to run ztractor
+    const response = await browser.runtime.sendMessage({
+      type: 'EXTRACT_METADATA_ZTRACTOR',
+      payload: { url, html },
+    });
 
-    // Translation-server supports two modes:
-    // 1. /web - For live URLs (translation-server fetches the page)
-    // 2. /web - With POST body containing HTML (use provided HTML)
-
-    let response: Response;
-
-    if (html) {
-      // Send HTML content for translation (preferred for browser extension)
-      response = await fetch(`${finalConfig.endpoint}/web`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: html,
-        signal: controller.signal,
-      });
+    if (response.success && response.items) {
+      return {
+        items: response.items,
+        url,
+        success: true,
+        translator: response.translator,
+      };
     } else {
-      // Let translation-server fetch the URL
-      response = await fetch(`${finalConfig.endpoint}/web`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: url,
-        signal: controller.signal,
-      });
-    }
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
       return {
         items: [],
         url,
         success: false,
-        error: `Translation-server returned status ${response.status}`,
+        error: response.error || 'No metadata could be extracted',
       };
     }
-
-    const items: ZoteroItem[] = await response.json();
-
-    return {
-      items,
-      url,
-      success: true,
-    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return {
       items: [],
       url,
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
-
-/**
- * Extract metadata from identifier (DOI, ISBN, PMID, arXiv ID)
- */
-export async function extractMetadataFromIdentifier(
-  identifier: string,
-  config: Partial<ZoteroTranslationServerConfig> = {}
-): Promise<ZoteroTranslationResult> {
-  const finalConfig = { ...DEFAULT_CONFIG, ...config };
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), finalConfig.timeout);
-
-    // Translation-server /search endpoint
-    const response = await fetch(`${finalConfig.endpoint}/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: identifier,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return {
-        items: [],
-        url: identifier,
-        success: false,
-        error: `Translation-server returned status ${response.status}`,
-      };
-    }
-
-    const items: ZoteroItem[] = await response.json();
-
-    return {
-      items,
-      url: identifier,
-      success: true,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-    return {
-      items: [],
-      url: identifier,
       success: false,
       error: errorMessage,
     };

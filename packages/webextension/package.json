@@ -21,7 +21,8 @@
     "@ai-sdk/openai": "^2.0.46",
     "ai": "^5.0.65",
     "lucide-svelte": "^0.545.0",
-    "svelte-sonner": "^1.0.5"
+    "svelte-sonner": "^1.0.5",
+    "ztractor": "^1.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.17",

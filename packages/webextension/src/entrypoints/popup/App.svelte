@@ -9,11 +9,7 @@
     } from "@acme/shared/utils/storage";
     import { highlightConfig } from "@acme/shared/stores/highlightConfig";
     import { aiConfig } from "@acme/shared/stores/aiConfig";
-    import { zoteroConfigStore } from "~/stores/zoteroConfig.svelte";
-    import {
-        extractMetadataWithZotero,
-        checkTranslationServerAvailable,
-    } from "~/lib/zoteroExtractor";
+    import { extractMetadataWithZotero } from "~/lib/zoteroExtractor";
     import {
         mapZoteroItemToExtractedMetadata,
         isZoteroExtractionSuccessful,
@@ -29,9 +25,6 @@
     let storesInitialized = $state(false);
     let initError = $state<string | null>(null);
     let cardCutterRef: any = $state(null);
-
-    // Use the Zotero config store singleton
-    const zoteroConfig = zoteroConfigStore;
 
     // Initialize stores and get current tab URL on mount
     onMount(async () => {
@@ -53,18 +46,6 @@
 
             await aiConfig.init();
             console.log("AI config initialized");
-
-            await zoteroConfig.load();
-            console.log("Zotero config initialized");
-
-            // Check if translation-server is available
-            if (zoteroConfig.enabled) {
-                const serverAvailable = await checkTranslationServerAvailable({
-                    endpoint: zoteroConfig.endpoint,
-                });
-                await zoteroConfig.setServerAvailability(serverAvailable);
-                console.log("Translation-server available:", serverAvailable);
-            }
 
             storesInitialized = true;
             console.log("Stores initialized successfully");
@@ -121,15 +102,11 @@
                 throw new Error("URL doesn't match current tab. Please navigate to the page you want to extract from.");
             }
 
-            // Extract metadata using Zotero translators
-            console.log("Extracting metadata with Zotero...");
+            // Extract metadata using Zotero translators (via ztractor)
+            console.log("Extracting metadata with ztractor...");
             const zoteroResult = await extractMetadataWithZotero(
                 actualUrl,
                 html,
-                {
-                    endpoint: zoteroConfig.endpoint,
-                    timeout: zoteroConfig.timeout,
-                },
             );
 
             if (zoteroResult.success && zoteroResult.items.length > 0) {
@@ -190,10 +167,10 @@
             }
 
             // If Zotero extraction failed, throw error
-            console.error("Zotero extraction failed:", zoteroResult.error);
+            console.error("Metadata extraction failed:", zoteroResult.error);
             throw new Error(
                 zoteroResult.error ||
-                    "Zotero extraction failed. Make sure translation-server is running.",
+                    "Metadata extraction failed. No translator could extract data from this page.",
             );
         } catch (error) {
             console.error("Metadata extraction failed:", error);

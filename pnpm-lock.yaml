@@ -148,6 +148,9 @@ importers:
       svelte-sonner:
         specifier: ^1.0.5
         version: 1.0.6(svelte@5.43.8)
+      ztractor:
+        specifier: ^1.0.0
+        version: 1.0.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.1.17
@@ -2859,6 +2862,9 @@ packages:
   zod@4.1.12:
     resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
 
+  ztractor@1.0.0:
+    resolution: {integrity: sha512-r972/4tyFzxT3WqS/rpSxmAbAcnU+wx/cki/KtRgG3rN6ICWNLJrdayFRbAH8u04eC9zzxmcJJAQEXSc9h+XeA==}
+
 snapshots:
 
   '@1natsu/wait-element@4.1.2':
@@ -5427,3 +5433,5 @@ snapshots:
       jszip: 3.10.1
 
   zod@4.1.12: {}
+
+  ztractor@1.0.0: {}
