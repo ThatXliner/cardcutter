@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@source "../../../node_modules/@acme/shared/src/**/*.svelte";
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 800px;
+    height: 700px;
+    overflow: auto;
+}
+
+#app {
+    width: 100%;
+    min-height: 100%;
+}
