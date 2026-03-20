@@ -102,11 +102,10 @@
 	let showManualHtmlInput = $state(false);
 	let extractionError = $state<string | null>(null);
 
-	// Auto-extract metadata when initialUrl is provided
+	// Set URL but don't auto-extract (user must click button to avoid detection)
 	$effect(() => {
-		if (initialUrl && initialUrl !== citation.url && extractMetadata) {
+		if (initialUrl && initialUrl !== citation.url) {
 			url = initialUrl;
-			handleUrlBlur();
 		}
 	});
 

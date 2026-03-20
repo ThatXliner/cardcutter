@@ -12,6 +12,8 @@ export default defineUnlistedScript(() => {
       const { url, html, requestId } = event.data.payload;
 
       try {
+        // Use ztractor to extract metadata
+        // DOMParser is available in page context
         const result = await extractMetadata({
           url,
           html,

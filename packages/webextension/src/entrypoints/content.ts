@@ -15,20 +15,33 @@ export default defineContentScript({
       const script = document.createElement("script");
       script.src = browser.runtime.getURL("injected.js");
       script.type = "module";
+
+      script.onerror = (error) => {
+        console.error("[Content Script] Failed to load injected script:", error);
+      };
+
       (document.head || document.documentElement).appendChild(script);
       injectedScriptLoaded = true;
     }
 
     // Listen for responses from injected script
     window.addEventListener("message", (event) => {
-      if (event.source !== window) return;
+      // Only process our specific messages, ignore all others
+      if (event.source !== window || event.data?.type !== "CARDCUTTER_EXTRACT_ZTRACTOR_RESPONSE") {
+        return;
+      }
 
       if (event.data.type === "CARDCUTTER_EXTRACT_ZTRACTOR_RESPONSE") {
         const { requestId, success, items, translator, error } = event.data.payload;
-        const resolver = pendingRequests.get(requestId);
 
+        const resolver = pendingRequests.get(requestId);
         if (resolver) {
-          resolver({ success, items, translator, error });
+          resolver({
+            success,
+            items,
+            translator,
+            error,
+          });
           pendingRequests.delete(requestId);
         }
       }
@@ -60,10 +73,12 @@ export default defineContentScript({
             const { url, html } = message.payload;
             const requestId = `${Date.now()}-${Math.random()}`;
 
+            // Create promise that will be resolved when injected script responds
             const responsePromise = new Promise((resolve) => {
               pendingRequests.set(requestId, resolve);
             });
 
+            // Send message to injected script via postMessage
             window.postMessage(
               {
                 type: "CARDCUTTER_EXTRACT_ZTRACTOR",
@@ -72,6 +87,7 @@ export default defineContentScript({
               "*"
             );
 
+            // Wait for response (no timeout - let ztractor handle its own timeout)
             const result = await responsePromise;
             sendResponse(result);
           } catch (error) {
@@ -86,7 +102,5 @@ export default defineContentScript({
         return true;
       }
     });
-
-    console.log("Card Cutter content script loaded");
   },
 });
