@@ -435,7 +435,9 @@
 				citation.date = metadata.date;
 			}
 
-			if (metadata.aiExtracted) {
+			if (!metadata.extractionMethod) {
+				toast.error('No metadata found for this URL');
+			} else if (metadata.aiExtracted) {
 				metadataWasAIExtracted = true;
 				toast.warning('Metadata extracted using AI - please verify accuracy', {
 					duration: 5000,

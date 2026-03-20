@@ -11,6 +11,9 @@
 	let localApiKey = $state(aiConfig.config.apiKey);
 	let localModel = $state(aiConfig.config.model);
 	let localZoteroUrl = $state(aiConfig.config.zoteroTranslationUrl);
+	let localEnableZotero = $state(aiConfig.config.enableZotero ?? true);
+	let localEnableRegex = $state(aiConfig.config.enableRegex ?? true);
+	let localEnableAI = $state(aiConfig.config.enableAI ?? true);
 
 	const providerOptions: { value: AIProvider; label: string }[] = [
 		{ value: 'none', label: 'None (Disabled)' },
@@ -43,6 +46,9 @@
 			localApiKey = aiConfig.config.apiKey;
 			localModel = aiConfig.config.model;
 			localZoteroUrl = aiConfig.config.zoteroTranslationUrl;
+			localEnableZotero = aiConfig.config.enableZotero ?? true;
+			localEnableRegex = aiConfig.config.enableRegex ?? true;
+			localEnableAI = aiConfig.config.enableAI ?? true;
 		}
 	});
 
@@ -60,7 +66,10 @@
 			provider: localProvider,
 			apiKey: localApiKey,
 			model: localModel,
-			zoteroTranslationUrl: localZoteroUrl
+			zoteroTranslationUrl: localZoteroUrl,
+			enableZotero: localEnableZotero,
+			enableRegex: localEnableRegex,
+			enableAI: localEnableAI
 		});
 
 		toast.success('AI settings saved successfully');
@@ -99,6 +108,27 @@
 			</div>
 
 			<div class="space-y-4">
+				<!-- Extraction Methods -->
+				<div>
+					<label class="mb-2 block font-semibold">Extraction Methods</label>
+					<div class="space-y-2">
+						<label class="flex items-center gap-2">
+							<input type="checkbox" bind:checked={localEnableZotero} class="h-4 w-4" />
+							<span>Zotero translators <span class="text-xs text-gray-500">(best quality, uses translation server)</span></span>
+						</label>
+						<label class="flex items-center gap-2">
+							<input type="checkbox" bind:checked={localEnableRegex} class="h-4 w-4" />
+							<span>Page meta tags <span class="text-xs text-gray-500">(fast, works on most sites)</span></span>
+						</label>
+						<label class="flex items-center gap-2">
+							<input type="checkbox" bind:checked={localEnableAI} class="h-4 w-4" />
+							<span>AI fallback <span class="text-xs text-gray-500">(slowest, requires API key below)</span></span>
+						</label>
+					</div>
+				</div>
+
+				<hr class="border-gray-200" />
+
 				<!-- Zotero Translation Server -->
 				<div>
 					<label class="mb-1 block font-semibold">Zotero Translation Server URL</label>

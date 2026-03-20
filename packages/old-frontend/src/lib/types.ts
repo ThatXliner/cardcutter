@@ -91,6 +91,9 @@ export interface AIConfig {
 	apiKey: string;
 	model: string;
 	zoteroTranslationUrl: string; // URL of Zotero translation server, e.g. http://localhost:1969
+	enableZotero: boolean;
+	enableRegex: boolean;
+	enableAI: boolean;
 }
 
 export interface ExtractedAuthor {

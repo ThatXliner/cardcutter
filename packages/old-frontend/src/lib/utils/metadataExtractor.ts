@@ -12,7 +12,10 @@ export async function extractMetadata(
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ url, zoteroTranslationUrl: aiConfig?.zoteroTranslationUrl || '' })
+			body: JSON.stringify({
+				url,
+				zoteroTranslationUrl: (aiConfig?.enableZotero ?? true) ? (aiConfig?.zoteroTranslationUrl || '') : ''
+			})
 		});
 
 		if (!response.ok) {
@@ -27,14 +30,31 @@ export async function extractMetadata(
 
 		const { html, metadata } = await response.json();
 
+		const enableRegex = aiConfig?.enableRegex ?? true;
+		const enableAI = aiConfig?.enableAI ?? true;
+		const usedZotero = !!metadata.authors;
+
+		// If Zotero ran and succeeded, mark it; otherwise if regex is disabled, clear regex results
+		if (usedZotero) {
+			metadata.extractionMethod = 'zotero';
+		} else if (!enableRegex) {
+			// Regex fired on the server but user disabled it — discard results
+			metadata.title = '';
+			metadata.author = '';
+			metadata.publisher = '';
+			metadata.date = '';
+		} else {
+			metadata.extractionMethod = 'regex';
+		}
+
 		// Check if publisher is URL-like (contains a dot, protocol, or starts with www)
 		const publisherIsUrlLike = metadata.publisher &&
 			(metadata.publisher.includes('.') ||
 			 metadata.publisher.includes('://') ||
 			 metadata.publisher.startsWith('www.'));
 
-		// If author is missing OR publisher looks like a URL, and AI is configured, try AI extraction
-		const needsAI = (!metadata.author || publisherIsUrlLike) &&
+		const needsAI = enableAI &&
+			(!metadata.author && !metadata.authors?.length || publisherIsUrlLike) &&
 			aiConfig &&
 			aiConfig.provider !== 'none' &&
 			aiConfig.apiKey;
@@ -43,7 +63,6 @@ export async function extractMetadata(
 			try {
 				const aiMetadata = await extractMetadataWithAI(url, html, aiConfig);
 
-				// Only use AI-extracted data for missing fields
 				if (!metadata.author && aiMetadata.author) {
 					metadata.author = aiMetadata.author;
 					metadata.aiExtracted = true;
@@ -60,18 +79,21 @@ export async function extractMetadata(
 					metadata.date = aiMetadata.date;
 					metadata.aiExtracted = true;
 				}
-				// Use AI publisher if current publisher is URL-like
 				if (publisherIsUrlLike && aiMetadata.publisher && !aiMetadata.publisher.includes('.')) {
 					metadata.publisher = aiMetadata.publisher;
 					metadata.aiExtracted = true;
 				}
 				metadata.extractionMethod = 'ai';
 			} catch (aiError) {
-				console.error('AI extraction failed, using algorithmic results:', aiError);
-				metadata.extractionMethod = 'regex';
+				console.error('AI extraction failed:', aiError);
 			}
-		} else {
-			metadata.extractionMethod = metadata.authors ? 'zotero' : 'regex';
+		}
+
+		// Signal if nothing useful was found
+		const hasAnyData = metadata.title || metadata.author || metadata.authors?.length ||
+			(metadata.publisher && !publisherIsUrlLike) || metadata.date;
+		if (!hasAnyData) {
+			metadata.extractionMethod = undefined; // signals "nothing found"
 		}
 
 		return metadata;

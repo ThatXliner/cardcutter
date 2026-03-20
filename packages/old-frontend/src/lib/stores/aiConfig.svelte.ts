@@ -21,7 +21,10 @@ const DEFAULT_CONFIG: AIConfig = {
 	provider: 'none',
 	apiKey: '',
 	model: '',
-	zoteroTranslationUrl: MANUBOT_TRANSLATION_URL
+	zoteroTranslationUrl: MANUBOT_TRANSLATION_URL,
+	enableZotero: true,
+	enableRegex: true,
+	enableAI: true
 };
 
 function getAIConfig(): AIConfig {
