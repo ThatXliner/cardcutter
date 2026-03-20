@@ -93,14 +93,20 @@ export interface AIConfig {
 	zoteroTranslationUrl: string; // URL of Zotero translation server, e.g. http://localhost:1969
 }
 
+export interface ExtractedAuthor {
+	firstName: string;
+	lastName: string;
+}
+
 export interface ExtractedMetadata {
 	title?: string;
-	author?: string;
+	author?: string; // flat string, used by regex/AI path
+	authors?: ExtractedAuthor[]; // structured, used by Zotero path
 	qualifications?: string;
 	publisher?: string;
 	date?: string;
 	description?: string;
-	aiExtracted?: boolean; // Flag indicating if AI was used for extraction
+	aiExtracted?: boolean;
 }
 
 export interface AIModelOption {

@@ -387,8 +387,16 @@
 				citation.articleTitle = metadata.title;
 			}
 
-			if (metadata.author) {
-				// Split by semicolons to handle multiple authors
+			if (metadata.authors && metadata.authors.length > 0) {
+				// Structured authors from Zotero — use directly, no splitting needed
+				citation.authors = metadata.authors.map((a) => ({
+					firstName: a.firstName,
+					lastName: a.lastName,
+					qualifications: metadata.qualifications || '',
+					qualificationsBold: []
+				}));
+			} else if (metadata.author) {
+				// Flat author string from regex/AI — split by semicolons and parse names
 				const authorStrings = metadata.author
 					.split(';')
 					.map((a) => a.trim())
@@ -396,7 +404,6 @@
 				const newAuthors: Author[] = [];
 
 				for (const authorString of authorStrings) {
-					// Try to split name
 					const nameParts = authorString.trim().split(' ');
 					const author: Author = {
 						firstName: '',

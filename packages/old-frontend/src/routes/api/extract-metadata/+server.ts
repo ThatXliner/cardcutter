@@ -87,10 +87,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 };
 
-async function tryZoteroExtraction(
-	url: string,
-	translationServerUrl: string
-): Promise<{ title: string; author: string; publisher: string; date: string } | null> {
+async function tryZoteroExtraction(url: string, translationServerUrl: string): Promise<{
+	title: string;
+	authors: { firstName: string; lastName: string }[];
+	publisher: string;
+	date: string;
+} | null> {
 	const base = translationServerUrl.replace(/\/$/, '');
 	const response = await fetch(`${base}/web`, {
 		method: 'POST',
@@ -113,19 +115,16 @@ async function tryZoteroExtraction(
 	const authorCreators = (item.author || item.creators || []).filter(
 		(c: any) => c.creatorType === 'author' || !c.creatorType
 	);
-	const authorString = authorCreators
-		.map((c: any) => {
-			if (c.name) return c.name; // organizational author
-			return [c.firstName, c.lastName].filter(Boolean).join(' ');
-		})
-		.join('; ');
+	const authors = authorCreators.map((c: any) => ({
+		firstName: c.firstName || (c.name ? c.name : ''),
+		lastName: c.lastName || ''
+	}));
 
-	const rawDate: string =
-		item.date || item.issued?.['date-parts']?.[0]?.join('-') || '';
+	const rawDate: string = item.date || item.issued?.['date-parts']?.[0]?.join('-') || '';
 
 	return {
 		title: item.title || '',
-		author: authorString,
+		authors,
 		publisher: item.publicationTitle || item.publisher || item.websiteTitle || item.blogTitle || '',
 		date: rawDate ? formatDate(rawDate) : ''
 	};
