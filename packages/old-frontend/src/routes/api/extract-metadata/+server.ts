@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const { url } = await request.json();
+		const { url, zoteroTranslationUrl } = await request.json();
 
 		if (!url || typeof url !== 'string') {
 			return json({ error: 'URL is required' }, { status: 400 });
@@ -14,6 +14,31 @@ export const POST: RequestHandler = async ({ request }) => {
 			new URL(url);
 		} catch {
 			return json({ error: 'Invalid URL' }, { status: 400 });
+		}
+
+		// Try Zotero translation server first if configured
+		if (zoteroTranslationUrl) {
+			try {
+				const zoteroResult = await tryZoteroExtraction(url, zoteroTranslationUrl);
+				if (zoteroResult) {
+					// Still fetch the HTML for potential AI fallback use
+					let html = '';
+					try {
+						const htmlResponse = await fetch(url, {
+							headers: {
+								'User-Agent': 'Mozilla/5.0 (compatible; CardCutter/1.0)',
+								Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+							}
+						});
+						if (htmlResponse.ok) html = await htmlResponse.text();
+					} catch {
+						// HTML fetch is best-effort for AI fallback
+					}
+					return json({ html, metadata: zoteroResult });
+				}
+			} catch (zoteroError) {
+				console.warn('Zotero extraction failed, falling back to regex:', zoteroError);
+			}
 		}
 
 		// Fetch the URL from the server (bypasses CORS)
@@ -61,6 +86,50 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'Failed to extract metadata' }, { status: 500 });
 	}
 };
+
+async function tryZoteroExtraction(
+	url: string,
+	translationServerUrl: string
+): Promise<{ title: string; author: string; publisher: string; date: string } | null> {
+	const base = translationServerUrl.replace(/\/$/, '');
+	const response = await fetch(`${base}/web`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'text/plain',
+			Accept: 'application/json'
+		},
+		body: url,
+		signal: AbortSignal.timeout(10000)
+	});
+
+	if (!response.ok) return null;
+
+	const items: any[] = await response.json();
+	if (!Array.isArray(items) || items.length === 0) return null;
+
+	const item = items[0];
+
+	// Extract authors: Zotero returns [{firstName, lastName, creatorType}]
+	const authorCreators = (item.author || item.creators || []).filter(
+		(c: any) => c.creatorType === 'author' || !c.creatorType
+	);
+	const authorString = authorCreators
+		.map((c: any) => {
+			if (c.name) return c.name; // organizational author
+			return [c.firstName, c.lastName].filter(Boolean).join(' ');
+		})
+		.join('; ');
+
+	const rawDate: string =
+		item.date || item.issued?.['date-parts']?.[0]?.join('-') || '';
+
+	return {
+		title: item.title || '',
+		author: authorString,
+		publisher: item.publicationTitle || item.publisher || item.websiteTitle || item.blogTitle || '',
+		date: rawDate ? formatDate(rawDate) : ''
+	};
+}
 
 function extractMetaTag(html: string, property: string): string | null {
 	// Try property attribute (Open Graph)

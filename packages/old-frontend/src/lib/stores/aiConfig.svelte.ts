@@ -15,10 +15,13 @@ function deobfuscate(text: string): string {
 	}
 }
 
+const MANUBOT_TRANSLATION_URL = 'https://translate.manubot.org';
+
 const DEFAULT_CONFIG: AIConfig = {
 	provider: 'none',
 	apiKey: '',
-	model: ''
+	model: '',
+	zoteroTranslationUrl: MANUBOT_TRANSLATION_URL
 };
 
 function getAIConfig(): AIConfig {

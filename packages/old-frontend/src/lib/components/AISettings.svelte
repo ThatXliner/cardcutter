@@ -10,6 +10,7 @@
 	let localProvider = $state(aiConfig.config.provider);
 	let localApiKey = $state(aiConfig.config.apiKey);
 	let localModel = $state(aiConfig.config.model);
+	let localZoteroUrl = $state(aiConfig.config.zoteroTranslationUrl);
 
 	const providerOptions: { value: AIProvider; label: string }[] = [
 		{ value: 'none', label: 'None (Disabled)' },
@@ -41,6 +42,7 @@
 			localProvider = aiConfig.config.provider;
 			localApiKey = aiConfig.config.apiKey;
 			localModel = aiConfig.config.model;
+			localZoteroUrl = aiConfig.config.zoteroTranslationUrl;
 		}
 	});
 
@@ -57,7 +59,8 @@
 		aiConfig.updateConfig({
 			provider: localProvider,
 			apiKey: localApiKey,
-			model: localModel
+			model: localModel,
+			zoteroTranslationUrl: localZoteroUrl
 		});
 
 		toast.success('AI settings saved successfully');
@@ -69,6 +72,7 @@
 		localApiKey = '';
 		localModel = '';
 		aiConfig.clearConfig();
+		localZoteroUrl = aiConfig.config.zoteroTranslationUrl; // reset to default
 		toast.info('AI settings cleared');
 	}
 </script>
@@ -95,9 +99,33 @@
 			</div>
 
 			<div class="space-y-4">
+				<!-- Zotero Translation Server -->
+				<div>
+					<label class="mb-1 block font-semibold">Zotero Translation Server URL</label>
+					<input
+						type="url"
+						bind:value={localZoteroUrl}
+						placeholder="https://translate.manubot.org"
+						class="w-full rounded border border-gray-300 px-3 py-2"
+					/>
+					<p class="mt-1 text-xs text-gray-600">
+						Used for high-quality citation metadata. Defaults to
+						<a href="https://translate.manubot.org" target="_blank" class="text-blue-600 underline"
+							>translate.manubot.org</a
+						> (public instance). You can also
+						<a
+							href="https://github.com/zotero/translation-server"
+							target="_blank"
+							class="text-blue-600 underline">self-host</a
+						>.
+					</p>
+				</div>
+
+				<hr class="border-gray-200" />
+
 				<!-- Provider Selection -->
 				<div>
-					<label class="mb-1 block font-semibold">AI Provider</label>
+					<label class="mb-1 block font-semibold">AI Provider (fallback)</label>
 					<select
 						bind:value={localProvider}
 						class="w-full rounded border border-gray-300 px-3 py-2"

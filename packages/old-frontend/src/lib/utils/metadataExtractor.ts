@@ -12,7 +12,7 @@ export async function extractMetadata(
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ url })
+			body: JSON.stringify({ url, zoteroTranslationUrl: aiConfig?.zoteroTranslationUrl || '' })
 		});
 
 		if (!response.ok) {
