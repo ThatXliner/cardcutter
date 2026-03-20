@@ -74,8 +74,7 @@
 					day: '2-digit',
 					year: '2-digit'
 				}),
-			code: oldData.code || loadCode(),
-			pageNumber: oldData.pageNumber || ''
+			code: oldData.code || loadCode()
 		};
 	}
 
@@ -107,8 +106,13 @@
 			day: '2-digit',
 			year: '2-digit'
 		}),
-		code: loadCode(),
-		pageNumber: ''
+		code: loadCode()
+	});
+
+	// Auto-derive 4-digit year from date field
+	let derivedYear = $derived(() => {
+		const match = citation.date.match(/\b(\d{4})\b/);
+		return match ? match[1] : '';
 	});
 
 	// Watch for code changes and save to localStorage
@@ -582,17 +586,17 @@
 			source,
 			url,
 			dateOfAccess,
-			code,
-			pageNumber
+			code
 		} = citation;
+		const year = derivedYear();
 
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
 
 		// Handle organization mode
 		if (authorType === 'organization') {
 			// If page number exists, include it in bold with organization name
-			if (pageNumber) {
-				html += `<strong>${organizationName} ${pageNumber}</strong>`;
+			if (year) {
+				html += `<strong>${organizationName} ${year}</strong>`;
 			} else {
 				html += `<strong>${organizationName}</strong>`;
 			}
@@ -640,8 +644,8 @@
 			const { firstName, lastName, qualifications, qualificationsBold } = author;
 
 			// Name formatting for first author
-			if (lastName && pageNumber) {
-				html += `<strong>${lastName} ${pageNumber}</strong>`;
+			if (lastName && year) {
+				html += `<strong>${lastName} ${year}</strong>`;
 				if (firstName) {
 					html += ` ${firstName}`;
 				}
@@ -714,9 +718,9 @@
 				}
 
 				// Name formatting (same logic as before, but for each author)
-				if (lastName && pageNumber && i === 0) {
-					// Only apply page number logic to first author
-					html += `<strong>${lastName} ${pageNumber}</strong>`;
+				if (lastName && year && i === 0) {
+					// Only apply year to first author
+					html += `<strong>${lastName} ${year}</strong>`;
 					if (firstName) {
 						html += ` ${firstName}`;
 					}
@@ -1114,16 +1118,6 @@
 					type="text"
 					bind:value={citation.dateOfAccess}
 					placeholder="11/9/22"
-					class="w-full rounded border border-gray-300 px-3 py-2"
-				/>
-			</div>
-
-			<div>
-				<label class="mb-1 block font-semibold">Page Number</label>
-				<input
-					type="text"
-					bind:value={citation.pageNumber}
-					placeholder="5"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>

@@ -26,7 +26,6 @@ export interface CitationData {
 	url: string;
 	dateOfAccess: string;
 	code: string;
-	pageNumber: string;
 }
 
 export interface HighlightLevel {
@@ -91,6 +90,7 @@ export interface AIConfig {
 	provider: AIProvider;
 	apiKey: string;
 	model: string;
+	zoteroTranslationUrl: string; // URL of Zotero translation server, e.g. http://localhost:1969
 }
 
 export interface ExtractedMetadata {
