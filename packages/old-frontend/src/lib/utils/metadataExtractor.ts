@@ -65,10 +65,13 @@ export async function extractMetadata(
 					metadata.publisher = aiMetadata.publisher;
 					metadata.aiExtracted = true;
 				}
+				metadata.extractionMethod = 'ai';
 			} catch (aiError) {
 				console.error('AI extraction failed, using algorithmic results:', aiError);
-				// Continue with algorithmic results
+				metadata.extractionMethod = 'regex';
 			}
+		} else {
+			metadata.extractionMethod = metadata.authors ? 'zotero' : 'regex';
 		}
 
 		return metadata;

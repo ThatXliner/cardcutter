@@ -435,14 +435,16 @@
 				citation.date = metadata.date;
 			}
 
-			// Show warning if AI was used
 			if (metadata.aiExtracted) {
 				metadataWasAIExtracted = true;
 				toast.warning('Metadata extracted using AI - please verify accuracy', {
 					duration: 5000,
-					description:
-						'Author information was extracted using AI since it could not be found automatically.'
+					description: 'Author information was extracted using AI since it could not be found automatically.'
 				});
+			} else if (metadata.extractionMethod === 'zotero') {
+				toast.success('Metadata extracted via Zotero translators');
+			} else if (metadata.extractionMethod === 'regex') {
+				toast.success('Metadata extracted via page meta tags');
 			}
 		} catch (error) {
 			console.error('Error extracting metadata:', error);

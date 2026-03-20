@@ -107,6 +107,7 @@ export interface ExtractedMetadata {
 	date?: string;
 	description?: string;
 	aiExtracted?: boolean;
+	extractionMethod?: 'zotero' | 'regex' | 'ai';
 }
 
 export interface AIModelOption {
