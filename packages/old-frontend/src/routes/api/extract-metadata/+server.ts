@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const { url, zoteroTranslationUrl } = await request.json();
+		const { url, zoteroTranslationUrl, manualHtml } = await request.json();
 
 		if (!url || typeof url !== 'string') {
 			return json({ error: 'URL is required' }, { status: 400 });
@@ -21,19 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			try {
 				const zoteroResult = await tryZoteroExtraction(url, zoteroTranslationUrl);
 				if (zoteroResult) {
-					// Still fetch the HTML for potential AI fallback use
-					let html = '';
-					try {
-						const htmlResponse = await fetch(url, {
-							headers: {
-								'User-Agent': 'Mozilla/5.0 (compatible; CardCutter/1.0)',
-								Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-							}
-						});
-						if (htmlResponse.ok) html = await htmlResponse.text();
-					} catch {
-						// HTML fetch is best-effort for AI fallback
-					}
+					const html = manualHtml || '';
 					return json({ html, metadata: zoteroResult });
 				}
 			} catch (zoteroError) {
@@ -41,22 +29,27 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 
-		// Fetch the URL from the server (bypasses CORS)
-		const response = await fetch(url, {
-			headers: {
-				'User-Agent': 'Mozilla/5.0 (compatible; CardCutter/1.0)',
-				Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+		// Use manual HTML if provided, otherwise fetch the URL from the server
+		let html: string;
+		if (manualHtml) {
+			html = manualHtml;
+		} else {
+			const response = await fetch(url, {
+				headers: {
+					'User-Agent': 'Mozilla/5.0 (compatible; CardCutter/1.0)',
+					Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+				}
+			});
+
+			if (!response.ok) {
+				return json(
+					{ error: `Failed to fetch URL: ${response.status} ${response.statusText}` },
+					{ status: response.status }
+				);
 			}
-		});
 
-		if (!response.ok) {
-			return json(
-				{ error: `Failed to fetch URL: ${response.status} ${response.statusText}` },
-				{ status: response.status }
-			);
+			html = await response.text();
 		}
-
-		const html = await response.text();
 
 		// Parse HTML and extract metadata
 		// Note: We can't use DOMParser on the server, so we'll use regex/string parsing

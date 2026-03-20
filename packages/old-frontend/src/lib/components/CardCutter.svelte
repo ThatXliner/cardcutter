@@ -83,6 +83,9 @@
 	let isExtracting = $state(false);
 	let copySuccess = $state(false);
 	let metadataWasAIExtracted = $state(false);
+	let manualHtml = $state('');
+	let showManualHtmlInput = $state(false);
+	let extractionError = $state<string | null>(null);
 
 	let citation = $state<CitationData>({
 		authorType: 'individual',
@@ -373,15 +376,16 @@
 		citation.isOrganization = !citation.isOrganization;
 	}
 
-	async function handleUrlBlur() {
-		if (!url || url === citation.url) return;
+	async function handleExtract() {
+		if (!url) return;
 
 		isExtracting = true;
 		citation.url = url;
 		metadataWasAIExtracted = false;
+		extractionError = null;
 
 		try {
-			const metadata = await extractMetadata(url, aiConfig.config);
+			const metadata = await extractMetadata(url, aiConfig.config, manualHtml || undefined);
 
 			if (metadata.title) {
 				citation.articleTitle = metadata.title;
@@ -450,7 +454,13 @@
 			}
 		} catch (error) {
 			console.error('Error extracting metadata:', error);
-			toast.error('Failed to extract metadata from URL');
+			extractionError = error instanceof Error ? error.message : 'Failed to extract metadata';
+			if (!manualHtml && !showManualHtmlInput) {
+				showManualHtmlInput = true;
+				toast.error('Extraction failed. Try providing the page HTML manually.', { duration: 5000 });
+			} else {
+				toast.error('Failed to extract metadata');
+			}
 		} finally {
 			isExtracting = false;
 		}
@@ -917,14 +927,72 @@
 					<span class="text-sm font-normal text-gray-500">(Extracting metadata...)</span>
 				{/if}
 			</label>
-			<input
-				type="url"
-				bind:value={url}
-				onblur={handleUrlBlur}
-				placeholder="https://example.com/article"
-				class="w-full rounded border border-gray-300 px-3 py-2"
-			/>
+			<div class="flex gap-2">
+				<input
+					type="url"
+					bind:value={url}
+					placeholder="https://example.com/article"
+					class="flex-1 rounded border border-gray-300 px-3 py-2"
+				/>
+				<button
+					onclick={handleExtract}
+					disabled={!url || isExtracting}
+					class="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+					type="button"
+				>
+					{isExtracting ? 'Extracting...' : 'Extract'}
+				</button>
+			</div>
+			{#if extractionError}
+				<p class="mt-2 text-sm text-red-600">{extractionError}</p>
+			{/if}
 		</div>
+
+		{#if showManualHtmlInput}
+			<div class="mb-4">
+				<div class="mb-2 flex items-center justify-between">
+					<label class="block font-semibold">Manual HTML Input</label>
+					<button
+						onclick={() => {
+							showManualHtmlInput = false;
+							manualHtml = '';
+						}}
+						class="text-sm text-gray-600 hover:text-gray-800"
+						type="button"
+					>
+						Hide
+					</button>
+				</div>
+				<p class="mb-2 text-sm text-gray-600">
+					If automatic extraction fails (e.g. the site blocks scrapers), paste the page's HTML here and click Extract again.
+				</p>
+				<textarea
+					bind:value={manualHtml}
+					placeholder="Right-click the page > View Page Source > copy and paste here..."
+					class="h-32 w-full rounded border border-gray-300 px-3 py-2 font-mono text-xs"
+				></textarea>
+				{#if manualHtml}
+					<button
+						disabled={!url || isExtracting}
+						onclick={handleExtract}
+						class="mt-2 rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+						type="button"
+					>
+						Retry with Manual HTML
+					</button>
+				{/if}
+			</div>
+		{:else}
+			<div class="mb-4">
+				<button
+					onclick={() => (showManualHtmlInput = true)}
+					class="text-sm text-blue-600 hover:text-blue-800"
+					type="button"
+				>
+					+ Provide HTML manually
+				</button>
+			</div>
+		{/if}
 
 		<div class="mb-4">
 			<div class="mb-4 flex items-center gap-4">

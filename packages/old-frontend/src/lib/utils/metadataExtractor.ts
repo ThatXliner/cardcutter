@@ -3,7 +3,8 @@ import { extractMetadataWithAI } from './aiMetadataExtractor';
 
 export async function extractMetadata(
 	url: string,
-	aiConfig?: AIConfig
+	aiConfig?: AIConfig,
+	manualHtml?: string
 ): Promise<ExtractedMetadata> {
 	try {
 		// Call the server-side API endpoint to fetch and parse metadata
@@ -14,7 +15,8 @@ export async function extractMetadata(
 			},
 			body: JSON.stringify({
 				url,
-				zoteroTranslationUrl: (aiConfig?.enableZotero ?? true) ? (aiConfig?.zoteroTranslationUrl || '') : ''
+				zoteroTranslationUrl: (aiConfig?.enableZotero ?? true) ? (aiConfig?.zoteroTranslationUrl || '') : '',
+				manualHtml
 			})
 		});
 
