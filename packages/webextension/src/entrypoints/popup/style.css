@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+	color: #1f2937;
+	background: #eff6ff;
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+	width: 780px;
+	height: 600px;
+	margin: 0;
+}
+
+body {
+	overflow: auto;
+}
+
+#app {
+	box-sizing: border-box;
+	min-height: 100%;
+	padding: 2rem;
+	background: linear-gradient(135deg, #eff6ff, #e0e7ff);
+}
+
+h1 {
+	margin: 0 0 0.5rem;
+	font-size: 1.25rem;
+}
+
+p {
+	margin: 0;
+	line-height: 1.5;
+}
+
+[role="alert"] {
+	color: #b91c1c;
+}

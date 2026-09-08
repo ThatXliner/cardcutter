@@ -1,35 +1,45 @@
 # Card Cutter
 
-Card Cutter is a local-first Chrome extension for making NSDA-style debate
-evidence cards from the page currently open in your browser. Click the toolbar
-button to capture the page, review its citation and text in the editor, then
-copy a rich-text card into Google Docs or another editor.
+Card Cutter turns the article you're reading into an NSDA-style debate evidence
+card. It runs as a Chrome and Firefox extension.
 
-The extension is the supported product in this repository. It reuses the
-original Card Cutter form, citation controls, card preview, and configurable
-highlight levels from `packages/shared`. `packages/old-frontend` is historical
-and is not the canonical interface.
+Use it like this:
+
+1. Open an article and, if useful, select the passage you want to quote.
+2. Click the Card Cutter button in the browser toolbar. The popup captures the
+   page and autofills citation fields from the captured HTML.
+3. Review and edit the citation and text. Apply highlight levels and add a tag
+   as needed.
+4. Copy the rich text and paste the card into Google Docs or another editor.
+
+The toolbar popup closes when you click outside it, as browser action popups
+normally do. Choose **Open in new tab** to keep working in a full browser tab.
+It opens the same saved draft, including edits already made in the popup. Saved
+cards are available locally from the editor.
 
 ## Privacy and limits
 
-Card Cutter does not use AI and does not send background network requests. It
-captures the active `http` or `https` page after a toolbar click, stores a
-temporary page snapshot in browser session storage, and saves your editable
-cards in browser local storage. Metadata extraction uses the bundled Zotero
-translator runtime against that cached HTML with network access denied.
-Browser storage has a finite quota; if a card cannot be saved, copy it and
-delete unused saved cards to free space.
+The extension uses the local [Ztractor](https://github.com/ThatXliner/ztractor)
+checkout's pinned Zotero translation runtime and bundled web translators. It
+does not use AI or make background
+requests to publishers. A toolbar capture reads the active `http` or `https`
+page and stores its HTML, text, and optional selection in browser session
+storage. Card drafts are saved in browser local storage.
 
-The page-only model has limits. Translators that need a follow-up network
-request can fail. Embedded Metadata is available as a local fallback when the
-page exposes compatible metadata, but missing fields are left blank for review;
-they are not guaranteed to be found. The extension does not claim support for
-every website.
+Metadata extraction runs against the captured HTML with `network: 'deny'`, so
+Ztractor blocks translator follow-up requests. Metadata is an autofill aid, not
+source verification. Translators can return wrong or incomplete fields, and
+missing fields stay blank. Review citation fields against the article before
+copying. Some sites require runtime features or network access, so universal
+site coverage is not promised.
 
-## Build from sibling checkouts
+## Build from source
 
-The extension consumes the local `ztractor` package at `../ztractor`, so clone
-both repositories beside one another:
+Card Cutter consumes `../ztractor` as a local package. For the same toolchain
+used by CI, use Node v22.22.3, pnpm 11.9.0, and Bun 1.3.14.
+
+Clone both repositories beside one another, build Ztractor first, then build
+the extension:
 
 ```sh
 git clone https://github.com/ThatXliner/cardcutter.git
@@ -42,44 +52,94 @@ bun run build
 
 cd ../cardcutter
 pnpm install
-pnpm extension:check
-pnpm extension:test
 pnpm extension:build
 ```
 
-This build was verified with Node v22.22.3 and pnpm 11.9.0. Rebuild `ztractor`
-before reinstalling Card Cutter whenever its local package changes.
+After changing the sibling checkout, rebuild Ztractor and run `pnpm install`
+in Card Cutter again. CI checks out a pinned Ztractor revision and builds that
+checkout before installing the extension.
 
-The legacy Vercel web-preview integration does not provide this required sibling
-dependency and is not an extension release path. The source build above and the
-extension CI workflow are the canonical verification paths.
+## Install a local build
 
-## Install the extension
+### Chrome
 
-For an unpacked Chrome build, run `pnpm extension:build`, open
-`chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**,
-and select `packages/webextension/.output/chrome-mv3`.
+Run `pnpm extension:build`, open `chrome://extensions`, turn on **Developer
+mode**, choose **Load unpacked**, and select:
 
-To create a zip, run:
+```
+packages/webextension/.output/chrome-mv3
+```
+
+The toolbar button opens the current capture popup. Load this artifact locally
+using the steps above.
+
+### Firefox 154+
+
+Build the Firefox Manifest V3 artifact:
+
+```sh
+pnpm --filter @acme/extension build:firefox
+```
+
+Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary
+Add-on**, and select:
+
+```
+packages/webextension/.output/firefox-mv3/manifest.json
+```
+
+Firefox removes unsigned temporary add-ons when it restarts. A permanent
+installation requires Mozilla signing.
+
+## Create ZIPs
+
+From the Card Cutter repository root, create the Chrome and Firefox archives
+with the package scripts:
 
 ```sh
 pnpm --filter @acme/extension zip
+# packages/webextension/.output/cardcutter-0.1.0-chrome.zip
+
+pnpm --filter @acme/extension zip:firefox
+# packages/webextension/.output/cardcutter-0.1.0-firefox.zip
 ```
 
-The generated archive is intended for manual distribution or inspection. This
-repository does not make claims about browser-store availability or approval.
+These archives are for local inspection or manual distribution.
 
-## Verify the extension
+## Develop and verify
 
-Install Chromium for Playwright once with `pnpm --filter @acme/extension exec
-playwright install chromium`, then run `pnpm --filter @acme/extension test:e2e`.
-The end-to-end suite loads the unpacked MV3 build and exercises the original
-Card Cutter controls against local fixtures.
+The root scripts delegate checks to the maintained extension package:
+
+```sh
+pnpm extension:check
+pnpm extension:test
+pnpm --filter @acme/extension test:manifest
+```
+
+`test:manifest` builds both Chrome and Firefox artifacts and checks their
+manifests. The end-to-end suite needs the built Chrome directory and a
+Playwright Chromium installation:
+
+```sh
+pnpm extension:build
+pnpm --filter @acme/extension exec playwright install chromium
+pnpm --filter @acme/extension test:e2e
+```
+
+For the native Firefox smoke test and the WXT development sandbox limitation,
+see the [webextension README](./packages/webextension/README.md). Native
+Firefox testing uses `build:firefox`; the WXT dev server's ESM sandbox is not
+the supported Firefox test path.
+
+## Repository map
+
+- `packages/shared`: original Svelte Card Cutter UI components and shared types.
+- `packages/webextension`: the maintained browser-extension product.
+- `packages/old-frontend`: historical frontend code, kept for reference.
 
 ## License and notices
 
-Card Cutter bundles [ztractor](https://github.com/ThatXliner/ztractor), which
-uses the Zotero translation runtime and translators. The full AGPL v3 license
-is in [LICENSE](./LICENSE); shipped extension builds also include `LICENSE`,
-`THIRD_PARTY_NOTICES.md`, and `ZOTERO_COPYING` from the public extension assets.
-See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for attribution details.
+Card Cutter is licensed under AGPL v3+, available in [LICENSE](./LICENSE). The
+extension bundles Ztractor, the Zotero translation runtime, and translators.
+Shipped builds include [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) and
+`ZOTERO_COPYING`; see those files for attribution details.

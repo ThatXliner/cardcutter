@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { browser } from 'wxt/browser';
 	import { Palette } from 'lucide-svelte';
 	import CardCutter from '@acme/shared/components/CardCutter.svelte';
 	import HighlightConfig from '@acme/shared/components/HighlightConfig.svelte';
 	import type { CardDraftState, CitationData, ExtractedMetadata } from '@acme/shared/types';
-	import { loadCapture, type Capture } from '../../lib/capture';
+	import { editorUrl, loadCapture, type Capture } from '../../lib/capture';
 	import { extractCapture } from '../../lib/extraction';
 
 	type Draft = {
@@ -21,8 +21,10 @@
 		translator: string;
 	};
 
-	const id = new URL(location.href).searchParams.get('id') || '';
-	const initialError = new URL(location.href).searchParams.get('error') || '';
+	const params = new URL(location.href).searchParams;
+	const id = params.get('id') || '';
+	const initialError = params.get('error') || '';
+	const isPopup = params.get('popup') === '1';
 	const draftKey = `draft:${id}`;
 	let capture = $state<Capture>();
 	let draft = $state<Draft>();
@@ -36,7 +38,11 @@
 	let sourceUrl = $state('');
 	let initializationError = $state('');
 	let shouldAutoExtract = $state(false);
+	let isOpeningInNewTab = $state(false);
+	let openError = $state('');
 	let saveSequence = 0;
+	let pendingSave: Promise<void> = Promise.resolve();
+	let pendingMetadataExtraction: Promise<ExtractedMetadata> | undefined;
 
 	const blankCitation = (page?: Capture): CitationData => ({
 		authorType: 'individual',
@@ -84,14 +90,23 @@
 	}
 
 	async function extractMetadata(url: string): Promise<ExtractedMetadata> {
-		if (!capture || url !== capture.url) {
-			throw new Error('Card Cutter only extracts from the captured page URL. Reopen the page and capture it again to use another URL.');
+		const extraction = (async () => {
+			if (!capture || url !== capture.url) {
+				throw new Error('Card Cutter only extracts from the captured page URL. Reopen the page and capture it again to use another URL.');
+			}
+			const result = await extractCapture(capture);
+			diagnostics = (result.diagnostics || []).map((entry) => `${entry.translator}: ${entry.message}`);
+			raw = JSON.stringify(result, null, 2);
+			translator = result.translator || 'Zotero';
+			return toMetadata(result);
+		})();
+
+		pendingMetadataExtraction = extraction;
+		try {
+			return await extraction;
+		} finally {
+			if (pendingMetadataExtraction === extraction) pendingMetadataExtraction = undefined;
 		}
-		const result = await extractCapture(capture);
-		diagnostics = (result.diagnostics || []).map((entry) => `${entry.translator}: ${entry.message}`);
-		raw = JSON.stringify(result, null, 2);
-		translator = result.translator || 'Zotero';
-		return toMetadata(result);
 	}
 
 	async function listDrafts() {
@@ -118,18 +133,58 @@
 		draft = next;
 		const sequence = ++saveSequence;
 		saveStatus = 'Saving…';
-		void browser.storage.local.set({ [draftKey]: next }).then(() => {
+		const snapshot = $state.snapshot(next);
+		const write = pendingSave.catch(() => undefined).then(async () => {
+			await browser.storage.local.set({ [draftKey]: snapshot });
+		});
+		pendingSave = write;
+		void write.then(() => {
 			if (sequence === saveSequence) saveStatus = 'Saved on this device';
 		}).catch(() => {
 			if (sequence === saveSequence) saveStatus = 'Could not save this card. Copy it now or delete unused saved cards to free space.';
 		});
 	}
 
+	async function waitForLatestDraftSave(): Promise<void> {
+		while (true) {
+			const save = pendingSave;
+			await save;
+			await tick();
+			if (save === pendingSave) return;
+		}
+	}
+
+	async function openInNewTab() {
+		if (!isPopup || !id || isOpeningInNewTab) return;
+
+		isOpeningInNewTab = true;
+		openError = '';
+		try {
+			const extraction = pendingMetadataExtraction;
+			if (extraction) await extraction.catch(() => undefined);
+			await tick();
+			await waitForLatestDraftSave();
+			await browser.tabs.create({ url: editorUrl(id, initialError || capture?.error) });
+			window.close();
+		} catch (error) {
+			openError = `Could not open this card in a new tab: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			isOpeningInNewTab = false;
+		}
+	}
+
+	function draftUrl(draftId: string): string {
+		const query = new URLSearchParams({ id: draftId });
+		if (isPopup) query.set('popup', '1');
+		return `editor.html?${query}`;
+	}
+
 	async function deleteDraft() {
 		if (!id || !window.confirm('Delete this saved card from this device? This cannot be undone.')) return;
 		try {
+			await waitForLatestDraftSave().catch(() => undefined);
 			await browser.storage.local.remove(draftKey);
-			location.assign(browser.runtime.getURL('/editor.html'));
+			location.assign(isPopup ? draftUrl('') : browser.runtime.getURL('/editor.html'));
 		} catch {
 			saveStatus = 'Could not delete this saved card.';
 		}
@@ -170,17 +225,33 @@
 
 <svelte:head><title>Card Cutter</title></svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-	<div class="container mx-auto px-4">
-		<div class="mb-8 text-center">
-			<h1 class="mb-2 text-4xl font-bold text-gray-900">NSDA Debate Card Cutter</h1>
+
+{#if isPopup}
+	<div class="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-indigo-100 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+		<span class="text-sm font-semibold text-gray-700">Card Cutter</span>
+		<button
+			onclick={openInNewTab}
+			disabled={!ready || !id || isOpeningInNewTab}
+			class="shrink-0 rounded bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+			type="button"
+		>
+			{isOpeningInNewTab ? 'Opening…' : 'Open in new tab'}
+		</button>
+		{#if openError}<span class="min-w-0 flex-1 text-right text-sm text-red-700" role="alert">{openError}</span>{/if}
+	</div>
+{/if}
+
+<div class={isPopup ? 'min-h-[600px] bg-gradient-to-br from-blue-50 to-indigo-100 py-2' : 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8'}>
+	<div class={isPopup ? 'container mx-auto px-3' : 'container mx-auto px-4'}>
+		<div class={isPopup ? 'mb-3 text-center' : 'mb-8 text-center'}>
+			<h1 class={isPopup ? 'mb-1 text-2xl font-bold text-gray-900' : 'mb-2 text-4xl font-bold text-gray-900'}>NSDA Debate Card Cutter</h1>
 			<p class="text-gray-600">Automatically format debate evidence with citations and highlights</p>
-			<div class="mt-4 flex justify-center gap-3">
+			<div class={isPopup ? 'mt-2 flex justify-center gap-3' : 'mt-4 flex justify-center gap-3'}>
 				<button data-intro="highlight-config" onclick={() => (showConfig = true)} class="inline-flex items-center gap-2 rounded bg-indigo-600 px-6 py-2 text-white hover:bg-indigo-700"><Palette size={20} />Configure Highlight Levels</button>
 			</div>
 			<div class="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-gray-600">
 				{#if id}<button onclick={deleteDraft} class="underline hover:text-gray-900">Delete saved card</button>{/if}
-				<details ontoggle={(event) => { if (event.currentTarget.open) void listDrafts(); }}><summary class="cursor-pointer underline">Saved cards ({recent.length})</summary><div class="mt-2 rounded bg-white p-3 text-left shadow">{#each recent as item}<a class="block py-1 hover:underline" href={`editor.html?id=${encodeURIComponent(item.id)}`}>{item.title}</a>{:else}<span>No saved cards yet.</span>{/each}</div></details>
+				<details ontoggle={(event) => { if (event.currentTarget.open) void listDrafts(); }}><summary class="cursor-pointer underline">Saved cards ({recent.length})</summary><div class="mt-2 rounded bg-white p-3 text-left shadow">{#each recent as item}<a class="block py-1 hover:underline" href={draftUrl(item.id)}>{item.title}</a>{:else}<span>No saved cards yet.</span>{/each}</div></details>
 				{#if saveStatus}<span role="status">{saveStatus}</span>{/if}
 			</div>
 		</div>

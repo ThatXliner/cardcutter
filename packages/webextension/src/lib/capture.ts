@@ -43,6 +43,16 @@ export const MAX_STORED_CAPTURES = 10;
 export const MAX_CAPTURE_BYTES = 8 * 1024 * 1024;
 export const MAX_SESSION_STORAGE_BYTES = 8 * 1024 * 1024;
 export const CAPTURE_STORAGE_PREFIX = "capture:";
+export const CAPTURE_POPUP_MESSAGE = "cardcutter:capture-popup";
+
+export interface CapturePopupMessage {
+	type: typeof CAPTURE_POPUP_MESSAGE;
+}
+
+export interface CapturePopupResponse {
+	id: string;
+	error?: string;
+}
 
 /**
  * This function is serialized and run in the active tab's isolated world.
@@ -260,15 +270,15 @@ export function editorUrl(id: string, error?: string): string {
 	return `${browser.runtime.getURL("/editor.html")}?${query}`;
 }
 
-/** Save the result of a toolbar capture before opening its editor tab. */
-export async function captureAndOpenEditor(tab: CaptureTab): Promise<Capture> {
+/** Capture and persist a tab, retaining a small error capture when storage fails. */
+export async function captureAndSave(tab: CaptureTab): Promise<Capture> {
 	const capture = await captureTab(tab);
 	let editorCapture = capture;
 	try {
 		await saveCapture(capture);
 	} catch (error) {
 		// A quota or storage failure should still produce a small, viewable
-		// error capture and open the editor for the user.
+		// error capture for the editor.
 		editorCapture = createErrorCapture(
 			tab,
 			capture.id,
@@ -280,6 +290,12 @@ export async function captureAndOpenEditor(tab: CaptureTab): Promise<Capture> {
 			console.error("Card Cutter could not save its error capture", fallbackError);
 		}
 	}
+	return editorCapture;
+}
+
+/** Save the result of a toolbar capture before opening its editor tab. */
+export async function captureAndOpenEditor(tab: CaptureTab): Promise<Capture> {
+	const editorCapture = await captureAndSave(tab);
 	await browser.tabs.create({ url: editorUrl(editorCapture.id, editorCapture.error) });
 	return editorCapture;
 }
