@@ -85,7 +85,9 @@ jobs:
     needs: prepare
     uses: ./.github/workflows/ci.yml
     permissions:
-      contents: read
+      # The reusable workflow also declares a release-only publishing job.
+      # Its extension build retains contents: read and publishing is skipped here.
+      contents: write
 
   publish:
     needs: [prepare, build]
