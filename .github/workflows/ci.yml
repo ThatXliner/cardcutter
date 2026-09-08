@@ -78,6 +78,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-release-zips
+          include-hidden-files: true
           path: |
             packages/webextension/.output/cardcutter-*-chrome.zip
             packages/webextension/.output/cardcutter-*-firefox.zip
