@@ -50,6 +50,10 @@ pnpm extension:build
 This build was verified with Node v22.22.3 and pnpm 11.9.0. Rebuild `ztractor`
 before reinstalling Card Cutter whenever its local package changes.
 
+The legacy Vercel web-preview integration does not provide this required sibling
+dependency and is not an extension release path. The source build above and the
+extension CI workflow are the canonical verification paths.
+
 ## Install the extension
 
 For an unpacked Chrome build, run `pnpm extension:build`, open
