@@ -1,4 +1,4 @@
-import { chromium, expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, test, type BrowserContext, type Page, type TestInfo } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -141,6 +141,33 @@ async function triggerAction(page: Page, extensionId: string): Promise<Page> {
 	await editor.waitForURL(`chrome-extension://${extensionId}/editor.html?*`);
 	await editor.waitForLoadState("domcontentloaded");
 	return editor;
+}
+
+function recordPageErrors(context: BrowserContext): () => string[] {
+	const errors: string[] = [];
+	const listen = (page: Page) => page.on("pageerror", error => errors.push(`${page.url()}: ${error.message}`));
+	for (const page of context.pages()) listen(page);
+	context.on("page", listen);
+	return () => errors;
+}
+
+async function attachCaptureDiagnostics(testInfo: TestInfo, editor: Page, pageErrors: () => string[]): Promise<void> {
+	const storage = await editor.evaluate(async () => {
+		const read = (area: chrome.storage.StorageArea) => area.get(null);
+		return {
+			session: await read(chrome.storage.session),
+			local: await read(chrome.storage.local),
+		};
+	});
+	await testInfo.attach("capture-diagnostics.json", {
+		body: JSON.stringify({
+			url: editor.url(),
+			bodyText: await editor.locator("body").innerText(),
+			pageErrors: pageErrors(),
+			storage,
+		}, null, 2),
+		contentType: "application/json",
+	});
 }
 
 test("captures a selected article, extracts local metadata, formats and persists a rich-text card", async () => {
@@ -320,14 +347,20 @@ test("persists a configured highlight level after the editor reloads", async () 
 	}
 });
 
-test("escapes hostile extracted metadata and shows a useful restricted-page error", async () => {
+test("escapes hostile extracted metadata and shows a useful restricted-page error", async ({}, testInfo) => {
 	const { context, profile, extensionId } = await openExtension();
 	try {
+		const pageErrors = recordPageErrors(context);
 		const articlePage = await context.newPage();
 		requests = [];
 		await articlePage.goto(`${baseUrl}/malicious`);
 		const editor = await triggerAction(articlePage, extensionId);
-		await expect(editor.locator("[data-intro=preview]")).toContainText("Unsafe title");
+		try {
+			await expect(editor.locator("[data-intro=preview]")).toContainText("Unsafe title");
+		} catch (error) {
+			await attachCaptureDiagnostics(testInfo, editor, pageErrors);
+			throw error;
+		}
 		expect(await editor.locator("[data-intro=preview] img, [data-intro=preview] script").count()).toBe(0);
 		expect(await editor.evaluate(() => (globalThis as { pwned?: unknown }).pwned)).toBeUndefined();
 		expect(requests).not.toContain("/beacon");
