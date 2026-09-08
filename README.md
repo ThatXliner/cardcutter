@@ -17,6 +17,23 @@ normally do. Choose **Open in new tab** to keep working in a full browser tab.
 It opens the same saved draft, including edits already made in the popup. Saved
 cards are available locally from the editor.
 
+## Web version
+
+The original web editor remains usable in `packages/old-frontend`, although the
+browser extension is recommended for capturing citations from the page you are
+reading. Its deployed build uses the separately published legacy `ztractor`
+package, can fetch page HTML over the network, and optionally supports
+bring-your-own-key (BYOK) AI metadata extraction. The extension uses its pinned
+local extractor and does not use AI or make background requests to publishers.
+
+Run the web editor locally with:
+
+```sh
+pnpm install --frozen-lockfile --filter @acme/old-frontend
+pnpm --filter @acme/old-frontend dev
+pnpm --filter @acme/old-frontend build
+```
+
 ## Privacy and limits
 
 The extension uses the local [Ztractor](https://github.com/ThatXliner/ztractor)
@@ -181,7 +198,7 @@ the supported Firefox test path.
 
 - `packages/shared`: original Svelte Card Cutter UI components and shared types.
 - `packages/webextension`: the maintained browser-extension product.
-- `packages/old-frontend`: historical frontend code, kept for reference.
+- `packages/old-frontend`: maintained deprecated web editor.
 
 ## License and notices
 
