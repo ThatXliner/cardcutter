@@ -112,6 +112,77 @@
 
 <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
 	<div class="container mx-auto px-4">
+		<aside
+			aria-labelledby="web-version-notice-title"
+			class="mb-8 rounded-xl border border-indigo-200 bg-white/90 p-5 text-left shadow-sm"
+		>
+			<p class="mb-1 text-sm font-semibold tracking-wide text-indigo-700 uppercase">
+				Web editor notice
+			</p>
+			<h2 id="web-version-notice-title" class="text-xl font-bold text-gray-900">
+				The web version is deprecated.
+			</h2>
+			<p class="mt-2 text-gray-700">
+				Use the Card Cutter extension for citations from the page you’re reading. You can still use
+				this web editor.
+			</p>
+
+			<details class="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/70 px-4 py-3">
+				<summary class="cursor-pointer font-semibold text-indigo-800 hover:text-indigo-900">
+					Learn more
+				</summary>
+				<div class="mt-3 space-y-4 text-sm leading-6 text-gray-700">
+					<p>
+						Download the extension from the
+						<a
+							href="https://github.com/ThatXliner/cardcutter/releases/latest"
+							target="_blank"
+							rel="noreferrer"
+							class="font-semibold text-indigo-700 underline hover:text-indigo-900"
+						>
+							latest release
+						</a>.
+					</p>
+
+					<div>
+						<h3 class="font-semibold text-gray-900">Chrome and Edge</h3>
+						<p>
+							Download the <code class="rounded bg-white px-1 py-0.5 font-mono text-xs">chrome</code
+							>
+							ZIP from the release (not the GitHub source archive), unzip it, and open
+							<code class="rounded bg-white px-1 py-0.5 font-mono text-xs">chrome://extensions</code
+							>
+							or
+							<code class="rounded bg-white px-1 py-0.5 font-mono text-xs">edge://extensions</code>.
+							Turn on Developer mode, choose Load unpacked, and select the unzipped folder
+							containing
+							<code class="rounded bg-white px-1 py-0.5 font-mono text-xs">manifest.json</code>.
+						</p>
+					</div>
+
+					<div>
+						<h3 class="font-semibold text-gray-900">Firefox 154+</h3>
+						<p>
+							Download the <code class="rounded bg-white px-1 py-0.5 font-mono text-xs"
+								>firefox</code
+							>
+							ZIP from the release, unzip it, and open
+							<code class="rounded bg-white px-1 py-0.5 font-mono text-xs"
+								>about:debugging#/runtime/this-firefox</code
+							>. Choose Load Temporary Add-on and select
+							<code class="rounded bg-white px-1 py-0.5 font-mono text-xs">manifest.json</code>.
+							Unsigned temporary installations are removed when Firefox restarts.
+						</p>
+					</div>
+
+					<p>
+						Open the article you want to cite, then click the Card Cutter toolbar icon. The popup
+						can be expanded into a new tab.
+					</p>
+				</div>
+			</details>
+		</aside>
+
 		<div class="mb-8 text-center">
 			<h1 class="mb-2 text-4xl font-bold text-gray-900">NSDA Debate Card Cutter</h1>
 			<p class="text-gray-600">

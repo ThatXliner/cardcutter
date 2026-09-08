@@ -84,6 +84,22 @@ jobs:
             packages/webextension/.output/cardcutter-*-firefox.zip
           if-no-files-found: error
 
+  web:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - name: Install the web editor dependencies
+        run: pnpm install --frozen-lockfile --filter @acme/old-frontend
+      - name: Build the web editor
+        run: pnpm --filter @acme/old-frontend build
+
   publish-release:
     if: github.event_name == 'release'
     needs: extension
