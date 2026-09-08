@@ -111,10 +111,22 @@ async function selectPassage(page: Page): Promise<void> {
 	}, selectedPassage);
 }
 
+async function waitForActionListener(context: BrowserContext, extensionId: string): Promise<void> {
+	const worker = context.serviceWorkers().find(candidate => new URL(candidate.url()).host === extensionId);
+	if (!worker) throw new Error(`The ${extensionId} service worker is unavailable.`);
+	const hasListener = () => worker.evaluate(() => (globalThis as unknown as {
+		chrome: { action: { onClicked: { hasListeners(): boolean } } };
+	}).chrome.action.onClicked.hasListeners());
+	if (!await hasListener()) {
+		await expect.poll(hasListener, { timeout: 10_000 }).toBe(true);
+	}
+}
+
 async function triggerAction(page: Page, extensionId: string): Promise<Page> {
 	const context = page.context();
 	const existingPages = new Set(context.pages());
 	await page.bringToFront();
+	await waitForActionListener(context, extensionId);
 	const pageSession = await context.newCDPSession(page);
 	const { targetInfo } = await pageSession.send("Target.getTargetInfo");
 	const browser = context.browser();
@@ -151,23 +163,30 @@ function recordPageErrors(context: BrowserContext): () => string[] {
 	return () => errors;
 }
 
-async function attachCaptureDiagnostics(testInfo: TestInfo, editor: Page, pageErrors: () => string[]): Promise<void> {
+async function attachCaptureDiagnostics(testInfo: TestInfo, editor: Page, pageErrors: () => string[]): Promise<string> {
 	const storage = await editor.evaluate(async () => {
-		const read = (area: chrome.storage.StorageArea) => area.get(null);
+		const browserChrome = (globalThis as unknown as {
+			chrome: { storage: { session: { get(keys: null): Promise<Record<string, unknown>> }; local: { get(keys: null): Promise<Record<string, unknown>> } } };
+		}).chrome;
+		const read = (area: { get(keys: null): Promise<Record<string, unknown>> }) => area.get(null);
 		return {
-			session: await read(chrome.storage.session),
-			local: await read(chrome.storage.local),
+			session: await read(browserChrome.storage.session),
+			local: await read(browserChrome.storage.local),
 		};
 	});
-	await testInfo.attach("capture-diagnostics.json", {
-		body: JSON.stringify({
+	const diagnostic = {
 			url: editor.url(),
 			bodyText: await editor.locator("body").innerText(),
+			alertText: await editor.getByRole("alert").allTextContents(),
 			pageErrors: pageErrors(),
 			storage,
-		}, null, 2),
+	};
+	const body = JSON.stringify(diagnostic, null, 2);
+	await testInfo.attach("capture-diagnostics.json", {
+		body,
 		contentType: "application/json",
 	});
+	return body;
 }
 
 test("captures a selected article, extracts local metadata, formats and persists a rich-text card", async () => {
@@ -358,7 +377,7 @@ test("escapes hostile extracted metadata and shows a useful restricted-page erro
 		try {
 			await expect(editor.locator("[data-intro=preview]")).toContainText("Unsafe title");
 		} catch (error) {
-			await attachCaptureDiagnostics(testInfo, editor, pageErrors);
+			console.error(`Hostile-capture diagnostics:\n${await attachCaptureDiagnostics(testInfo, editor, pageErrors)}`);
 			throw error;
 		}
 		expect(await editor.locator("[data-intro=preview] img, [data-intro=preview] script").count()).toBe(0);
