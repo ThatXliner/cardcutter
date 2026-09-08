@@ -1,2 +1,11 @@
 @import "tailwindcss";
 @source "../../../../shared/src";
+
+body.cardcutter-popup {
+	width: 780px;
+	height: 600px;
+	min-width: 780px;
+	max-width: 780px;
+	margin: 0;
+	overflow: auto;
+}

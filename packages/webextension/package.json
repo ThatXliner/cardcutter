@@ -6,14 +6,16 @@
   "type": "module",
   "scripts": {
     "dev": "wxt",
-    "dev:firefox": "wxt -b firefox",
+    "dev:firefox": "wxt -b firefox --mv3",
     "build": "wxt build",
-    "build:firefox": "wxt build -b firefox",
+    "build:firefox": "wxt build -b firefox --mv3",
     "zip": "wxt zip",
-    "zip:firefox": "wxt zip -b firefox",
+    "zip:firefox": "wxt zip -b firefox --mv3",
+    "test:manifest": "pnpm build && pnpm build:firefox && node scripts/assert-manifests.mjs",
     "check": "wxt prepare && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run src",
     "test:e2e": "playwright test",
+    "test:firefox:smoke": "python3 scripts/firefox-smoke.py",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

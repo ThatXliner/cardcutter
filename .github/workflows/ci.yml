@@ -36,7 +36,8 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm extension:check
           pnpm extension:test
-          pnpm extension:build
+          pnpm --filter @acme/extension test:manifest
+          pnpm --filter @acme/extension zip:firefox
       - name: Run the Chromium extension flow
         run: |
           pnpm --filter @acme/extension exec playwright install --with-deps chromium
@@ -52,3 +53,8 @@ jobs:
         with:
           name: cardcutter-chrome-mv3
           path: packages/webextension/.output/chrome-mv3
+      - name: Upload Firefox extension package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardcutter-firefox-mv3
+          path: packages/webextension/.output/cardcutter-0.1.0-firefox.zip

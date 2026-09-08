@@ -8,7 +8,10 @@ import {
 	MAX_STORED_CAPTURES,
 	MAX_TEXT_BYTES,
 	capturePage,
+	captureAndOpenEditor,
+	captureAndSave,
 	captureTab,
+	editorUrl,
 	loadCapture,
 	saveCapture,
 	validatePageSnapshot,
@@ -32,6 +35,7 @@ describe("capture host", () => {
 	let executeScript: ReturnType<typeof vi.fn>;
 	let remove: ReturnType<typeof vi.fn>;
 	let set: ReturnType<typeof vi.fn>;
+	let tabsCreate: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
 		state = {};
@@ -40,6 +44,7 @@ describe("capture host", () => {
 		remove = vi.fn(async (keys: string[]) => {
 			for (const key of keys) delete state[key];
 		});
+		tabsCreate = vi.fn();
 
 		vi.stubGlobal("crypto", { randomUUID: () => "new-capture" });
 		vi.stubGlobal("browser", {
@@ -54,7 +59,7 @@ describe("capture host", () => {
 					remove,
 				},
 			},
-			tabs: { create: vi.fn() },
+			tabs: { create: tabsCreate },
 			runtime: { getURL: vi.fn((path: string) => `chrome-extension://id${path}`) },
 		});
 	});
@@ -91,6 +96,46 @@ describe("capture host", () => {
 			world: "ISOLATED",
 			func: capturePage,
 		});
+	});
+
+	it("saves a capture without opening a tab", async () => {
+		executeScript.mockResolvedValueOnce([
+			{
+				result: {
+					url: "https://example.test/article",
+					title: "Example",
+					html: "<html></html>",
+					text: "Article",
+					selection: "",
+					capturedAt: "2026-01-01T00:00:00.000Z",
+				},
+			},
+		]);
+
+		const capture = await captureAndSave({ id: 7, url: "https://example.test/article", title: "Example" });
+
+		expect(capture.id).toBe("new-capture");
+		expect(state[`${CAPTURE_STORAGE_PREFIX}new-capture`]).toEqual(capture);
+		expect(tabsCreate).not.toHaveBeenCalled();
+	});
+
+	it("retains the wrapper that opens the saved capture in a new tab", async () => {
+		executeScript.mockResolvedValueOnce([
+			{
+				result: {
+					url: "https://example.test/article",
+					title: "Example",
+					html: "<html></html>",
+					text: "Article",
+					selection: "",
+					capturedAt: "2026-01-01T00:00:00.000Z",
+				},
+			},
+		]);
+
+		const capture = await captureAndOpenEditor({ id: 7, url: "https://example.test/article", title: "Example" });
+
+		expect(tabsCreate).toHaveBeenCalledWith({ url: editorUrl(capture.id) });
 	});
 
 	it("records an explicit error for unsupported pages without executing page code", async () => {

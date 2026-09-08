@@ -1,7 +1,7 @@
-import { chromium, expect, test, type BrowserContext, type Page, type TestInfo } from "@playwright/test";
+import { chromium, expect, test, type Browser, type BrowserContext, type Page, type TestInfo } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -115,16 +115,121 @@ async function waitForActionListener(context: BrowserContext, extensionId: strin
 	const worker = context.serviceWorkers().find(candidate => new URL(candidate.url()).host === extensionId);
 	if (!worker) throw new Error(`The ${extensionId} service worker is unavailable.`);
 	const hasListener = () => worker.evaluate(() => (globalThis as unknown as {
-		chrome: { action: { onClicked: { hasListeners(): boolean } } };
-	}).chrome.action.onClicked.hasListeners());
+		chrome: { runtime: { onMessage: { hasListeners(): boolean } } };
+	}).chrome.runtime.onMessage.hasListeners());
 	if (!await hasListener()) {
 		await expect.poll(hasListener, { timeout: 10_000 }).toBe(true);
 	}
 }
 
-async function triggerAction(page: Page, extensionId: string): Promise<Page> {
+type PopupCommand = <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>;
+type Popup = {
+	evaluate: <T = unknown>(expression: string) => Promise<T>;
+	command: PopupCommand;
+};
+type BeforeExpand = (popup: Popup) => Promise<void>;
+type BrowserSession = Awaited<ReturnType<Browser["newBrowserCDPSession"]>>;
+type TargetInfo = {
+	targetId: string;
+	type: string;
+	url: string;
+	attached: boolean;
+	browserContextId?: string;
+};
+
+const popupCommandTimeout = 20_000;
+
+function createPopupProtocol(browserSession: BrowserSession, sessionId: string): Popup & { cleanup: () => void } {
+	type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>; method: string };
+	const pending = new Map<number, Pending>();
+	let nextId = 0;
+
+	const onMessage = (event: { sessionId: string; message: string }) => {
+		if (event.sessionId !== sessionId) return;
+		let response: { id?: unknown; result?: unknown; error?: { message?: string } };
+		try {
+			response = JSON.parse(event.message) as typeof response;
+		} catch {
+			return;
+		}
+		if (typeof response.id !== "number") return;
+		const request = pending.get(response.id);
+		if (!request) return;
+		pending.delete(response.id);
+		clearTimeout(request.timer);
+		if (response.error) {
+			request.reject(new Error(response.error.message || `Popup CDP command failed: ${request.method}`));
+		} else {
+			request.resolve(response.result);
+		}
+	};
+
+	browserSession.on("Target.receivedMessageFromTarget", onMessage);
+
+	const command: PopupCommand = <T = unknown>(method: string, params: Record<string, unknown> = {}) => new Promise<T>((resolve, reject) => {
+		const id = ++nextId;
+		const timer = setTimeout(() => {
+			pending.delete(id);
+			reject(new Error(`Timed out waiting ${popupCommandTimeout}ms for popup CDP command ${method}.`));
+		}, popupCommandTimeout);
+		pending.set(id, { resolve: (value) => resolve(value as T), reject, timer, method });
+		void browserSession.send("Target.sendMessageToTarget", {
+			sessionId,
+			message: JSON.stringify({ id, method, params }),
+		}).catch((error: unknown) => {
+			const request = pending.get(id);
+			if (!request) return;
+			pending.delete(id);
+			clearTimeout(request.timer);
+			request.reject(error instanceof Error ? error : new Error(String(error)));
+		});
+	});
+
+	const evaluate = async <T,>(expression: string): Promise<T> => {
+		const response = await command<{ result?: { value?: unknown }; exceptionDetails?: { text?: string; exception?: { description?: string } } }>("Runtime.evaluate", {
+			expression,
+			returnByValue: true,
+			awaitPromise: true,
+		});
+		if (response.exceptionDetails) {
+			throw new Error(response.exceptionDetails.text || response.exceptionDetails.exception?.description || "Popup evaluation failed.");
+		}
+		return response.result?.value as T;
+	};
+
+	const cleanup = () => {
+		browserSession.off("Target.receivedMessageFromTarget", onMessage);
+		for (const request of pending.values()) {
+			clearTimeout(request.timer);
+			request.reject(new Error("Popup CDP session closed."));
+		}
+		pending.clear();
+	};
+
+	return { command, evaluate, cleanup };
+}
+
+function isPopupEditorUrl(urlValue: string, extensionId: string): boolean {
+	try {
+		const url = new URL(urlValue);
+		return url.protocol === "chrome-extension:" &&
+			url.host === extensionId &&
+			url.pathname === "/editor.html" &&
+			url.searchParams.get("popup") === "1" &&
+			Boolean(url.searchParams.get("id"));
+	} catch {
+		return false;
+	}
+}
+
+function isPopupEditorTarget(target: TargetInfo, extensionId: string, browserContextId?: string): boolean {
+	return target.type === "page" &&
+		isPopupEditorUrl(target.url, extensionId) &&
+		(browserContextId === undefined || target.browserContextId === browserContextId);
+}
+
+async function triggerAction(page: Page, extensionId: string, beforeExpand?: BeforeExpand): Promise<Page> {
 	const context = page.context();
-	const existingPages = new Set(context.pages());
 	await page.bringToFront();
 	await waitForActionListener(context, extensionId);
 	const pageSession = await context.newCDPSession(page);
@@ -132,27 +237,76 @@ async function triggerAction(page: Page, extensionId: string): Promise<Page> {
 	const browser = context.browser();
 	if (!browser) throw new Error("The persistent Chromium browser is unavailable.");
 	const browserSession = await browser.newBrowserCDPSession();
-	const { targetInfos } = await browserSession.send("Target.getTargets", {
+	const getTabTargets = async () => (await browserSession.send("Target.getTargets", {
 		filter: [{ type: "tab", exclude: false }, { exclude: true }],
-	});
-	const tabTarget = targetInfos.find(target => target.url === targetInfo.url && target.browserContextId === targetInfo.browserContextId);
+	})).targetInfos;
+	const getTargets = async () => (await browserSession.send("Target.getTargets")).targetInfos as TargetInfo[];
+	const tabTargetsBeforeAction = await getTabTargets();
+	const targetsBeforeAction = await getTargets();
+	const targetIdsBeforeAction = new Set(targetsBeforeAction.map(target => target.targetId));
+	const tabTarget = tabTargetsBeforeAction.find(target => target.url === targetInfo.url && target.browserContextId === targetInfo.browserContextId);
 	if (!tabTarget) throw new Error(`Could not find the tab target for ${targetInfo.url}.`);
+	const getNormalTabTargets = async () => (await getTabTargets()).filter(target => !isPopupEditorUrl(target.url, extensionId));
+	const normalTabTargetsBeforeAction = await getNormalTabTargets();
 	await browserSession.send("Target.activateTarget", { targetId: tabTarget.targetId });
 	try {
 		await browserSession.send("Extensions.triggerAction", { id: extensionId, targetId: tabTarget.targetId });
 	} catch (error) {
 		throw new Error(`Extensions.triggerAction failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
-	let editor: Page | undefined;
-	for (let attempt = 0; attempt < 100; attempt += 1) {
-		editor = context.pages().find(candidate => !existingPages.has(candidate) && candidate.url().startsWith(`chrome-extension://${extensionId}/editor.html`));
-		if (editor) break;
-		await page.waitForTimeout(100);
+
+	let popupTarget: TargetInfo | undefined;
+	await expect.poll(async () => {
+		popupTarget = (await getTargets()).find(target => !targetIdsBeforeAction.has(target.targetId) && isPopupEditorTarget(target, extensionId, tabTarget.browserContextId));
+		return Boolean(popupTarget);
+	}, { timeout: popupCommandTimeout, intervals: [100, 250, 500] }).toBe(true);
+	if (!popupTarget) {
+		throw new Error(`The toolbar action did not expose an extension editor popup target. CDP targets: ${JSON.stringify(await getTargets())}`);
 	}
-	if (!editor) throw new Error("The toolbar action did not open an editor tab.");
-	await editor.waitForURL(`chrome-extension://${extensionId}/editor.html?*`);
-	await editor.waitForLoadState("domcontentloaded");
-	return editor;
+
+	const { sessionId } = await browserSession.send("Target.attachToTarget", { targetId: popupTarget.targetId, flatten: false });
+	const popup = createPopupProtocol(browserSession, sessionId);
+	try {
+		const popupUrl = new URL(popupTarget.url);
+		const captureId = popupUrl.searchParams.get("id");
+		if (!captureId) throw new Error(`The popup editor did not include a capture id: ${popupTarget.url}`);
+		await expect.poll(() => popup.evaluate<{ ready: boolean; tagEnabled: boolean }>(`(() => ({ ready: Boolean(document.querySelector('[data-intro="evidence-text"]')), tagEnabled: (() => { const element = document.querySelector('#card-tag'); return element instanceof HTMLInputElement && !element.disabled; })() }))()`), { timeout: popupCommandTimeout, intervals: [100, 250, 500] }).toEqual({ ready: true, tagEnabled: true });
+		if (beforeExpand) await beforeExpand(popup);
+		const normalTabTargetsBeforeExpansion = await getNormalTabTargets();
+		expect(normalTabTargetsBeforeExpansion).toHaveLength(normalTabTargetsBeforeAction.length);
+
+		const pagesBeforeExpansion = new Set(context.pages());
+		await popup.evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(candidate => candidate.textContent?.trim() === 'Open in new tab'); if (!(button instanceof HTMLButtonElement)) throw new Error('Open in new tab button was not found.'); if (button.disabled) throw new Error('Open in new tab button is disabled.'); button.click(); })()`);
+		let editor: Page | undefined;
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			editor = context.pages().find(candidate => {
+				if (pagesBeforeExpansion.has(candidate)) return false;
+				try {
+					const url = new URL(candidate.url());
+					return url.protocol === "chrome-extension:" && url.host === extensionId && url.pathname === "/editor.html" && url.searchParams.get("id") === captureId && !url.searchParams.has("popup");
+				} catch {
+					return false;
+				}
+			});
+			if (editor) break;
+			await page.waitForTimeout(100);
+		}
+		if (!editor) throw new Error(`The popup editor did not open a full editor tab for capture ${captureId}. Pages: ${JSON.stringify(context.pages().map(candidate => candidate.url()))}`);
+		await editor.waitForURL((url) => {
+			const parsed = new URL(url);
+			return parsed.protocol === "chrome-extension:" && parsed.host === extensionId && parsed.pathname === "/editor.html" && parsed.searchParams.get("id") === captureId && !parsed.searchParams.has("popup");
+		});
+		await editor.waitForLoadState("domcontentloaded");
+		return editor;
+	} finally {
+		popup.cleanup();
+		try {
+			await browserSession.send("Target.detachFromTarget", { sessionId });
+		} catch {
+			// The popup may already have closed itself after opening the full tab.
+		}
+		await browserSession.detach().catch(() => undefined);
+	}
 }
 
 function recordPageErrors(context: BrowserContext): () => string[] {
@@ -199,10 +353,39 @@ test("captures a selected article, extracts local metadata, formats and persists
 		await articlePage.goto(`${baseUrl}/article`);
 		await selectPassage(articlePage);
 		const requestCountBeforeCapture = requests.length;
-		const editor = await triggerAction(articlePage, extensionId);
+		const popupTag = "Popup edit survives expansion.";
+		const editor = await triggerAction(articlePage, extensionId, async (popup) => {
+			const state = () => popup.evaluate<{ evidence: string; author: string; title: string; publisher: string }>(`(() => ({
+				evidence: document.querySelector('[data-intro="evidence-text"]')?.value || '',
+				author: document.querySelector('#author-first-0')?.value || '',
+				title: document.querySelector('#article-title')?.value || '',
+				publisher: document.querySelector('#source-publisher')?.value || '',
+			}))()`);
+			await expect.poll(state, { timeout: popupCommandTimeout, intervals: [100, 250, 500] }).toEqual({
+				evidence: selectedPassage,
+				author: "Jane",
+				title: "Reliable evidence",
+				publisher: "Evidence Review",
+			});
+			await popup.evaluate(`(() => {
+				const input = document.querySelector('#card-tag');
+				if (!(input instanceof HTMLInputElement)) throw new Error('Card tag input was not found.');
+				const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+				if (!setter) throw new Error('Card tag value setter was not found.');
+				setter.call(input, ${JSON.stringify(popupTag)});
+				input.dispatchEvent(new Event('input', { bubbles: true }));
+				input.dispatchEvent(new Event('change', { bubbles: true }));
+			})()`);
+			await expect.poll(() => popup.evaluate<string>(`document.querySelector('[role="status"]')?.textContent || ''`), { timeout: popupCommandTimeout, intervals: [100, 250, 500] }).toContain("Saved on this device");
+			const screenshot = await popup.command<{ data: string }>("Page.captureScreenshot", { format: "png" });
+			if (typeof screenshot.data !== "string") throw new Error("Popup screenshot response did not contain image data.");
+			await mkdir(join(process.cwd(), "test-results"), { recursive: true });
+			await writeFile(join(process.cwd(), "test-results", "popup.png"), Buffer.from(screenshot.data, "base64"));
+		});
 		editor.on("pageerror", error => pageErrors.push(error));
 
 		await expect(editor.locator("[data-intro=evidence-text]")).toHaveValue(selectedPassage);
+		await expect(editor.locator("#card-tag")).toHaveValue(popupTag);
 		await expect(editor.locator("#author-first-1")).toBeVisible();
 		await expect(editor.locator("#author-first-0")).toHaveValue("Jane");
 		await expect(editor.locator("#author-last-0")).toHaveValue("Doe");
