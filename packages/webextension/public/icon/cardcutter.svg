@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Card Cutter">
+  <defs>
+    <linearGradient id="cardcutter-gradient" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#cardcutter-gradient)"/>
+  <path fill="#fff" d="M42 39c0-5 4-9 9-9h30c5 0 9 4 9 9v50c0 5-4 9-9 9H51c-5 0-9-4-9-9V39Zm11 3v44h26V42H53Z"/>
+  <path fill="#c7d2fe" d="M54 54h24v7H54zm0 13h18v7H54z"/>
+  <path fill="#fff" d="M36 84a10 10 0 1 1 8-16l18-18 6 6-18 18a10 10 0 0 1-14 10Zm0-13a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm40 27a10 10 0 1 1 8-16L66 64l6-6 18 18a10 10 0 0 1-14 22Zm0-13a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+</svg>

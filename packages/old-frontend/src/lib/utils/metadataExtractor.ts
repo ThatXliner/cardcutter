@@ -1,83 +1,117 @@
 import type { ExtractedMetadata, AIConfig } from '$lib/types';
 import { extractMetadataWithAI } from './aiMetadataExtractor';
+import {
+	extractMetadataWithZtractor,
+	mapZoteroItemToExtractedMetadata,
+	isZoteroExtractionSuccessful
+} from './ztractorExtractor';
 
 export async function extractMetadata(
 	url: string,
-	aiConfig?: AIConfig
+	aiConfig?: AIConfig,
+	manualHtml?: string
 ): Promise<ExtractedMetadata> {
 	try {
-		// Call the server-side API endpoint to fetch and parse metadata
-		const response = await fetch('/api/extract-metadata', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ url })
-		});
+		let html: string;
 
-		if (!response.ok) {
-			const error = await response.json();
-			console.error('Failed to fetch metadata from server:', error);
-			// Return basic metadata from URL
-			return {
-				publisher: new URL(url).hostname.replace('www.', ''),
-				aiExtracted: false
-			};
+		// If manual HTML is provided, use it directly
+		if (manualHtml) {
+			html = manualHtml;
+		} else {
+			// Call the server-side API endpoint to fetch HTML (bypasses CORS)
+			const response = await fetch('/api/extract-metadata', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ url })
+			});
+
+			if (!response.ok) {
+				const error = await response.json();
+				console.error('Failed to fetch HTML from server:', error);
+				throw new Error(
+					error.error || 'Failed to fetch page content. Please provide HTML manually.'
+				);
+			}
+
+			const responseData = await response.json();
+			html = responseData.html;
 		}
 
-		const { html, metadata } = await response.json();
+		// Extract metadata using Zotero translators (via ztractor)
+		console.log('🔍 [MetadataExtractor] Starting ztractor extraction...');
+		console.log('🔗 [MetadataExtractor] URL:', url);
+		console.log('📄 [MetadataExtractor] HTML length:', html?.length || 0, 'characters');
 
-		// Check if publisher is URL-like (contains a dot, protocol, or starts with www)
-		const publisherIsUrlLike = metadata.publisher &&
-			(metadata.publisher.includes('.') ||
-			 metadata.publisher.includes('://') ||
-			 metadata.publisher.startsWith('www.'));
+		const zoteroResult = await extractMetadataWithZtractor(url, html);
 
-		// If author is missing OR publisher looks like a URL, and AI is configured, try AI extraction
-		const needsAI = (!metadata.author || publisherIsUrlLike) &&
-			aiConfig &&
-			aiConfig.provider !== 'none' &&
-			aiConfig.apiKey;
+		console.log('📊 [MetadataExtractor] Zotero extraction result:', {
+			success: zoteroResult.success,
+			translator: zoteroResult.translator,
+			itemCount: zoteroResult.items?.length || 0,
+			error: zoteroResult.error
+		});
 
-		if (needsAI) {
-			try {
-				const aiMetadata = await extractMetadataWithAI(url, html, aiConfig);
+		if (zoteroResult.success && zoteroResult.items.length > 0) {
+			const firstItem = zoteroResult.items[0];
 
-				// Only use AI-extracted data for missing fields
-				if (!metadata.author && aiMetadata.author) {
-					metadata.author = aiMetadata.author;
-					metadata.aiExtracted = true;
+			// Check if extraction was successful
+			if (isZoteroExtractionSuccessful(firstItem)) {
+				console.log(
+					'✅ [MetadataExtractor] Zotero extraction successful using translator:',
+					zoteroResult.translator
+				);
+
+				// Map Zotero item to ExtractedMetadata
+				let metadata = mapZoteroItemToExtractedMetadata(firstItem);
+
+				// Enhance with AI qualifications if configured and author exists but no qualifications
+				const needsAI =
+					metadata.author &&
+					!metadata.qualifications &&
+					aiConfig &&
+					aiConfig.provider !== 'none' &&
+					aiConfig.apiKey;
+
+				if (needsAI) {
+					try {
+						console.log('🤖 [MetadataExtractor] Extracting qualifications with AI...');
+						const aiMetadata = await extractMetadataWithAI(url, html, aiConfig);
+
+						if (aiMetadata.qualifications) {
+							console.log(
+								'✅ [MetadataExtractor] AI extracted qualifications:',
+								aiMetadata.qualifications
+							);
+							metadata = {
+								...metadata,
+								qualifications: aiMetadata.qualifications,
+								aiExtracted: true
+							};
+						}
+					} catch (aiError) {
+						console.error(
+							'❌ [MetadataExtractor] AI qualifications extraction failed:',
+							aiError
+						);
+						// Continue without qualifications
+					}
 				}
-				if (!metadata.qualifications && aiMetadata.qualifications) {
-					metadata.qualifications = aiMetadata.qualifications;
-					metadata.aiExtracted = true;
-				}
-				if (!metadata.title && aiMetadata.title) {
-					metadata.title = aiMetadata.title;
-					metadata.aiExtracted = true;
-				}
-				if (!metadata.date && aiMetadata.date) {
-					metadata.date = aiMetadata.date;
-					metadata.aiExtracted = true;
-				}
-				// Use AI publisher if current publisher is URL-like
-				if (publisherIsUrlLike && aiMetadata.publisher && !aiMetadata.publisher.includes('.')) {
-					metadata.publisher = aiMetadata.publisher;
-					metadata.aiExtracted = true;
-				}
-			} catch (aiError) {
-				console.error('AI extraction failed, using algorithmic results:', aiError);
-				// Continue with algorithmic results
+
+				return metadata;
 			}
 		}
 
-		return metadata;
+		// If Zotero extraction failed, throw error
+		console.error('❌ [MetadataExtractor] Metadata extraction failed:', zoteroResult.error);
+		console.error('❌ [MetadataExtractor] No suitable translator found for this page');
+		throw new Error(
+			zoteroResult.error ||
+				'Metadata extraction failed. No translator could extract data from this page.'
+		);
 	} catch (error) {
 		console.error('Failed to extract metadata:', error);
-		// Return basic metadata from URL
-		return {
-			publisher: new URL(url).hostname.replace('www.', ''),
-			aiExtracted: false
-		};
+		throw error;
 	}
 }

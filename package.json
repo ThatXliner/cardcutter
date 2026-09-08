@@ -1,0 +1,10 @@
+{
+  "name": "cardcutter",
+  "private": true,
+  "scripts": {
+    "extension:build": "pnpm --filter @acme/extension build",
+    "extension:check": "pnpm --filter @acme/extension check",
+    "extension:test": "pnpm --filter @acme/extension test"
+  },
+  "packageManager": "pnpm@11.9.0"
+}

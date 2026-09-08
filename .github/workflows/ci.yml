@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Check out the pinned local extractor dependency
+        run: |
+          git clone --recurse-submodules https://github.com/ThatXliner/ztractor.git ../ztractor
+          git -C ../ztractor checkout eb6725b12b9461f5b80489190d5f266741ebcfff
+          git -C ../ztractor submodule update --init --recursive
+      - name: Build the local extractor dependency
+        working-directory: ../ztractor
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+      - name: Install and verify the extension
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm extension:check
+          pnpm extension:test
+          pnpm extension:build
+      - name: Run the Chromium extension flow
+        run: |
+          pnpm --filter @acme/extension exec playwright install --with-deps chromium
+          pnpm --filter @acme/extension test:e2e
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardcutter-browser-failure
+          path: packages/webextension/test-results
+      - name: Upload unpacked Chrome extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardcutter-chrome-mv3
+          path: packages/webextension/.output/chrome-mv3
