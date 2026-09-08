@@ -159,14 +159,18 @@ pnpm run update patch
 The script changes only the extension package version; it does not commit, tag,
 or publish, and it leaves dependencies and lockfiles unchanged.
 
-Commit and merge the version bump on `main`, then publish a GitHub release with
-a tag of `vVERSION` that matches the extension package version. The [release
-workflow](https://github.com/ThatXliner/cardcutter/actions/workflows/ci.yml)
-builds and tests the extension, uploads the Chrome and Firefox ZIPs, and fails
-before the build if the release tag does not match. For example:
+Commit and merge the version bump on `main`, then open **Actions > Create new
+release**, choose **Run workflow**, select `main`, and run it. The workflow reads
+the version from `packages/webextension/package.json`, builds and tests that
+commit, creates the matching `vVERSION` tag and release, and attaches the Chrome
+and Firefox ZIPs. The release includes the install instructions from
+`.github/release-notes.md`.
+
+To publish the release manually instead, use the same tag and notes template:
 
 ```sh
-gh release create v0.2.0 --target main --title "Card Cutter v0.2.0" --generate-notes
+gh release create v0.2.0 --target main --title "Card Cutter v0.2.0" \
+  --notes-file .github/release-notes.md
 ```
 
 ## Develop and verify
