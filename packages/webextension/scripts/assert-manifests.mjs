@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const output = join(process.cwd(), ".output");
+const canonicalPackage = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8"));
 
 async function readManifest(browser) {
 	return JSON.parse(await readFile(join(output, `${browser}-mv3`, "manifest.json"), "utf8"));
@@ -17,6 +18,7 @@ const [chrome, firefox, chromeSandbox, firefoxSandbox] = await Promise.all([
 
 for (const manifest of [chrome, firefox]) {
 	assert.equal(manifest.manifest_version, 3);
+	assert.equal(manifest.version, canonicalPackage.version);
 	assert.equal(manifest.action.default_popup, "popup.html");
 	assert.deepEqual(manifest.sandbox, { pages: ["sandbox.html"] });
 	assert.equal(

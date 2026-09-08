@@ -2,6 +2,8 @@
   "name": "cardcutter",
   "private": true,
   "scripts": {
+    "update": "node scripts/update-version.mjs",
+    "test:release": "node --test scripts/update-version.test.mjs",
     "extension:build": "pnpm --filter @acme/extension build",
     "extension:check": "pnpm --filter @acme/extension check",
     "extension:test": "pnpm --filter @acme/extension test"
