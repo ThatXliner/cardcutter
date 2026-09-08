@@ -4,7 +4,16 @@
 
 Build Chrome with `pnpm build`, or Firefox Manifest V3 with `pnpm build:firefox`.
 Create the Firefox package with `pnpm zip:firefox`. The result is
-`.output/cardcutter-0.1.0-firefox.zip`.
+`.output/cardcutter-<version>-firefox.zip`.
+
+## Install the latest release
+
+Download the Chrome or Firefox archive from the [latest GitHub
+release](https://github.com/ThatXliner/cardcutter/releases/latest):
+`cardcutter-<version>-chrome.zip` or `cardcutter-<version>-firefox.zip`.
+Unzip it and follow the browser installation steps in the root
+[README](../../README.md). GitHub's Source code ZIPs are not built extension
+packages.
 
 The browser action opens a 780 × 600 capture popup. It captures the active
 current-window page and opens the existing Card Cutter editor inline; choose

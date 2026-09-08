@@ -33,6 +33,26 @@ missing fields stay blank. Review citation fields against the article before
 copying. Some sites require runtime features or network access, so universal
 site coverage is not promised.
 
+## Install the latest release
+
+Open the [latest GitHub release](https://github.com/ThatXliner/cardcutter/releases/latest)
+and download the Chrome or Firefox archive: `cardcutter-<version>-chrome.zip`
+or `cardcutter-<version>-firefox.zip`. GitHub's automatically generated Source
+code ZIPs are source archives and do not contain the built extension.
+
+### Chrome
+
+Unzip the Chrome archive and find the folder containing `manifest.json`. Open
+`chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and
+select that folder.
+
+### Firefox 154+
+
+Unzip the Firefox archive and open `about:debugging#/runtime/this-firefox`.
+Choose **Load Temporary Add-on** and select its `manifest.json`. Firefox removes
+unsigned temporary add-ons when it restarts; a permanent installation requires
+Mozilla signing. A release install needs no source checkout or build tools.
+
 ## Build from source
 
 Card Cutter consumes `../ztractor` as a local package. For the same toolchain
@@ -98,13 +118,39 @@ with the package scripts:
 
 ```sh
 pnpm --filter @acme/extension zip
-# packages/webextension/.output/cardcutter-0.1.0-chrome.zip
+# packages/webextension/.output/cardcutter-<version>-chrome.zip
 
 pnpm --filter @acme/extension zip:firefox
-# packages/webextension/.output/cardcutter-0.1.0-firefox.zip
+# packages/webextension/.output/cardcutter-<version>-firefox.zip
 ```
 
 These archives are for local inspection or manual distribution.
+
+## Version and release (maintainers)
+
+The canonical extension version is in `packages/webextension/package.json`.
+Update it with one argument:
+
+```sh
+# Choose one:
+pnpm run update patch
+# pnpm run update minor
+# pnpm run update major
+# pnpm run update 0.2.0
+```
+
+The script changes only the extension package version; it does not commit, tag,
+or publish, and it leaves dependencies and lockfiles unchanged.
+
+Commit and merge the version bump on `main`, then publish a GitHub release with
+a tag of `vVERSION` that matches the extension package version. The [release
+workflow](https://github.com/ThatXliner/cardcutter/actions/workflows/ci.yml)
+builds and tests the extension, uploads the Chrome and Firefox ZIPs, and fails
+before the build if the release tag does not match. For example:
+
+```sh
+gh release create v0.2.0 --target main --title "Card Cutter v0.2.0" --generate-notes
+```
 
 ## Develop and verify
 
