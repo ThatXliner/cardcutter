@@ -1,37 +1,81 @@
 # Card Cutter
 
-A browser extension and web application for creating properly formatted debate evidence cards with citations.
+Card Cutter is a local-first Chrome extension for making NSDA-style debate
+evidence cards from the page currently open in your browser. Click the toolbar
+button to capture the page, review its citation and text in the editor, then
+copy a rich-text card into Google Docs or another editor.
 
-## Features
+The extension is the supported product in this repository. It reuses the
+original Card Cutter form, citation controls, card preview, and configurable
+highlight levels from `packages/shared`. `packages/old-frontend` is historical
+and is not the canonical interface.
 
-- **Zotero-Powered Metadata Extraction**: Uses Zotero translators for accurate extraction from thousands of websites
-- **AI-Enhanced Qualifications**: Optional AI integration to extract author credentials and affiliations
-- **Multi-Level Text Highlighting**: Customizable highlight levels for emphasis in evidence
-- **NSDA Citation Format**: Automatically formats citations for National Speech & Debate Association standards
-- **Rich Text Output**: Copy formatted cards directly to Word, Google Docs, or any rich text editor
+## Privacy and limits
 
-## Getting Started
+Card Cutter does not use AI and does not send background network requests. It
+captures the active `http` or `https` page after a toolbar click, stores a
+temporary page snapshot in browser session storage, and saves your editable
+cards in browser local storage. Metadata extraction uses the bundled Zotero
+translator runtime against that cached HTML with network access denied.
+Browser storage has a finite quota; if a card cannot be saved, copy it and
+delete unused saved cards to free space.
 
-### Browser Extension
+The page-only model has limits. Translators that need a follow-up network
+request can fail. Embedded Metadata is available as a local fallback when the
+page exposes compatible metadata, but missing fields are left blank for review;
+they are not guaranteed to be found. The extension does not claim support for
+every website.
 
-The extension provides the best experience with automatic page detection and seamless copying.
+## Build from sibling checkouts
 
-See [ZOTERO_SETUP.md](./ZOTERO_SETUP.md) for instructions on setting up Zotero translation-server for metadata extraction.
+The extension consumes the local `ztractor` package at `../ztractor`, so clone
+both repositories beside one another:
 
-### Web Application
+```sh
+git clone https://github.com/ThatXliner/cardcutter.git
+git clone --recurse-submodules https://github.com/ThatXliner/ztractor.git
 
-See [./packages/old-frontend](./packages/old-frontend) for the original web application (currently being migrated).
+cd ztractor
+git submodule update --init --recursive
+bun install
+bun run build
 
-## Architecture
+cd ../cardcutter
+pnpm install
+pnpm extension:check
+pnpm extension:test
+pnpm extension:build
+```
 
-This is a monorepo with three packages:
+This build was verified with Node v22.22.3 and pnpm 11.9.0. Rebuild `ztractor`
+before reinstalling Card Cutter whenever its local package changes.
 
-- **packages/webextension**: Browser extension built with WXT and Svelte 5
-- **packages/shared**: Shared library with components and utilities
-- **packages/old-frontend**: Original SvelteKit web application (being phased out)
+## Install the extension
 
-## Development
+For an unpacked Chrome build, run `pnpm extension:build`, open
+`chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**,
+and select `packages/webextension/.output/chrome-mv3`.
 
-See individual package READMEs for development instructions.
+To create a zip, run:
 
-Big changes are happening! 🚀
+```sh
+pnpm --filter @acme/extension zip
+```
+
+The generated archive is intended for manual distribution or inspection. This
+repository does not make claims about browser-store availability or approval.
+
+## Verify the extension
+
+Install Chromium for Playwright once with `pnpm --filter @acme/extension exec
+playwright install chromium`, then run `pnpm --filter @acme/extension test:e2e`.
+The end-to-end suite loads the unpacked MV3 build and exercises the original
+Card Cutter controls against local fixtures.
+
+## License and notices
+
+Card Cutter bundles [ztractor](https://github.com/ThatXliner/ztractor), which
+uses the Zotero translation runtime and translators. The full AGPL v3 license
+is in [LICENSE](./LICENSE); shipped extension builds also include `LICENSE`,
+`THIRD_PARTY_NOTICES.md`, and `ZOTERO_COPYING` from the public extension assets.
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for attribution details.

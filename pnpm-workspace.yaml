@@ -1,3 +1,10 @@
 packages:
   # all packages in direct subdirs of packages/
   - "packages/*"
+
+# Keep installation reproducible while allowing the native bundler binary WXT
+# needs to prepare and build the extension.
+allowBuilds:
+  core-js: false
+  esbuild: true
+  spawn-sync: false

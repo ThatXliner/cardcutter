@@ -49,65 +49,65 @@ export const localStorageAdapter: StorageAdapter = {
  */
 export const browserStorageAdapter: StorageAdapter = {
 	async getItem(key: string): Promise<string | null> {
-		// Check for browser API (Firefox/polyfill) or chrome API
-		const storage = (typeof browser !== 'undefined' && (browser as any).storage)
-			? (browser as any).storage
-			: (typeof (globalThis as any).chrome !== 'undefined' && (globalThis as any).chrome.storage)
-				? (globalThis as any).chrome.storage
-				: null;
+		const browserApi = (globalThis as any).browser;
+		const storage = browserApi?.storage || (globalThis as any).chrome?.storage || null;
 
 		if (!storage) {
 			throw new Error('Neither browser.storage nor chrome.storage API is available');
 		}
 
 		// Use Promise-based API (browser) or callback-based API (chrome)
-		if (typeof browser !== 'undefined' && (browser as any).storage) {
-			const result = await (browser as any).storage.local.get(key);
+		if (browserApi?.storage) {
+			const result = await browserApi.storage.local.get(key);
 			return result[key] ?? null;
 		} else {
 			// Chrome callback API wrapped in Promise
-			return new Promise((resolve) => {
+			return new Promise((resolve, reject) => {
 				(globalThis as any).chrome.storage.local.get(key, (result: any) => {
+					const error = (globalThis as any).chrome.runtime?.lastError;
+					if (error) return reject(new Error(error.message));
 					resolve(result[key] ?? null);
 				});
 			});
 		}
 	},
 	async setItem(key: string, value: string): Promise<void> {
-		const storage = (typeof browser !== 'undefined' && (browser as any).storage)
-			? (browser as any).storage
-			: (typeof (globalThis as any).chrome !== 'undefined' && (globalThis as any).chrome.storage)
-				? (globalThis as any).chrome.storage
-				: null;
+		const browserApi = (globalThis as any).browser;
+		const storage = browserApi?.storage || (globalThis as any).chrome?.storage || null;
 
 		if (!storage) {
 			throw new Error('Neither browser.storage nor chrome.storage API is available');
 		}
 
-		if (typeof browser !== 'undefined' && (browser as any).storage) {
-			await (browser as any).storage.local.set({ [key]: value });
+		if (browserApi?.storage) {
+			await browserApi.storage.local.set({ [key]: value });
 		} else {
-			return new Promise((resolve) => {
-				(globalThis as any).chrome.storage.local.set({ [key]: value }, () => resolve());
+			return new Promise((resolve, reject) => {
+				(globalThis as any).chrome.storage.local.set({ [key]: value }, () => {
+					const error = (globalThis as any).chrome.runtime?.lastError;
+					if (error) return reject(new Error(error.message));
+					resolve();
+				});
 			});
 		}
 	},
 	async removeItem(key: string): Promise<void> {
-		const storage = (typeof browser !== 'undefined' && (browser as any).storage)
-			? (browser as any).storage
-			: (typeof (globalThis as any).chrome !== 'undefined' && (globalThis as any).chrome.storage)
-				? (globalThis as any).chrome.storage
-				: null;
+		const browserApi = (globalThis as any).browser;
+		const storage = browserApi?.storage || (globalThis as any).chrome?.storage || null;
 
 		if (!storage) {
 			throw new Error('Neither browser.storage nor chrome.storage API is available');
 		}
 
-		if (typeof browser !== 'undefined' && (browser as any).storage) {
-			await (browser as any).storage.local.remove(key);
+		if (browserApi?.storage) {
+			await browserApi.storage.local.remove(key);
 		} else {
-			return new Promise((resolve) => {
-				(globalThis as any).chrome.storage.local.remove(key, () => resolve());
+			return new Promise((resolve, reject) => {
+				(globalThis as any).chrome.storage.local.remove(key, () => {
+					const error = (globalThis as any).chrome.runtime?.lastError;
+					if (error) return reject(new Error(error.message));
+					resolve();
+				});
 			});
 		}
 	}

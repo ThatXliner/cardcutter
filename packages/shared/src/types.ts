@@ -85,6 +85,14 @@ export interface PositionHighlight {
 	text: string; // Original highlighted text (for verification/debugging)
 }
 
+export interface CardDraftState {
+	citation: CitationData;
+	sourceText: string;
+	highlights: PositionHighlight[];
+	tag: string;
+	error?: string;
+}
+
 export type AIProvider = 'none' | 'openai' | 'anthropic' | 'google';
 
 export interface AIConfig {
@@ -96,11 +104,21 @@ export interface AIConfig {
 export interface ExtractedMetadata {
 	title?: string;
 	author?: string;
+	creators?: ExtractedCreator[];
 	qualifications?: string;
 	publisher?: string;
 	date?: string;
 	description?: string;
 	aiExtracted?: boolean; // Flag indicating if AI was used for extraction
+}
+
+/** Metadata from a Zotero-style creator without guessing how a name splits. */
+export interface ExtractedCreator {
+	creatorType?: string;
+	firstName?: string;
+	lastName?: string;
+	name?: string;
+	fieldMode?: number;
 }
 
 export interface AIModelOption {

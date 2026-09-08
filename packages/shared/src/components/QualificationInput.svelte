@@ -4,9 +4,10 @@
 		boldArray: boolean[];
 		onchange?: (value: string, boldArray: boolean[]) => void;
 		placeholder?: string;
+		id?: string;
 	}
 
-	let { value = $bindable(''), boldArray = $bindable([]), onchange, placeholder = '' }: Props = $props();
+	let { value = $bindable(''), boldArray = $bindable([]), onchange, placeholder = '', id }: Props = $props();
 
 	let inputElement: HTMLInputElement | undefined = $state();
 	let selectionStart = $state(0);
@@ -117,6 +118,7 @@
 <div class="space-y-2">
 	<div class="flex gap-2">
 		<input
+			{id}
 			bind:this={inputElement}
 			type="text"
 			value={value}

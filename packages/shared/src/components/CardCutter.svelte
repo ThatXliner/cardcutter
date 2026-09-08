@@ -1,19 +1,38 @@
 <script lang="ts">
-	import type { CitationData, TextSegment, Author, PositionHighlight, ExtractedMetadata } from '../types';
+	import { onMount, untrack } from 'svelte';
+	import type {
+		CardDraftState,
+		CitationData,
+		TextSegment,
+		Author,
+		PositionHighlight,
+		ExtractedMetadata
+	} from '../types';
 	import { highlightConfig } from '../stores/highlightConfig.svelte';
-	import { aiConfig } from '../stores/aiConfig.svelte';
 	import { copyRichText } from '../utils/clipboard';
 	import { generateCardHtml } from '../utils/citation';
-	import { toast } from 'svelte-sonner';
-	import { Sparkles, Plus, X } from 'lucide-svelte';
+	import { Plus, X } from 'lucide-svelte';
 	import QualificationInput from './QualificationInput.svelte';
 
 	interface Props {
-		extractMetadata?: (url: string, manualHtml?: string) => Promise<ExtractedMetadata>;
+		extractMetadata?: (url: string) => Promise<ExtractedMetadata>;
 		initialUrl?: string;
+		initialState?: CardDraftState;
+		initialSourceText?: string;
+		initialCitation?: CitationData;
+		autoExtract?: boolean;
+		onStateChange?: (state: CardDraftState) => void;
 	}
 
-	let { extractMetadata, initialUrl = '' }: Props = $props();
+	let {
+		extractMetadata,
+		initialUrl = '',
+		initialState,
+		initialSourceText = '',
+		initialCitation,
+		autoExtract = false,
+		onStateChange
+	}: Props = $props();
 
 	const CODE_STORAGE_KEY = 'cardcutter_user_code';
 
@@ -94,13 +113,14 @@
 	}
 
 	let url = $state(initialUrl);
-	let sourceText = $state('');
+	let sourceText = $state(initialState?.sourceText ?? initialSourceText);
 	let isExtracting = $state(false);
 	let copySuccess = $state(false);
-	let metadataWasAIExtracted = $state(false);
-	let manualHtml = $state('');
-	let showManualHtmlInput = $state(false);
-	let extractionError = $state<string | null>(null);
+	let extractionError = $state<string | null>(initialState?.error || null);
+	let copyFallback = $state('');
+	let tag = $state(initialState?.tag ?? '');
+	let preview = $state<HTMLDivElement>();
+	let autoExtractionStarted = false;
 
 	// Set URL but don't auto-extract (user must click button to avoid detection)
 	$effect(() => {
@@ -109,7 +129,7 @@
 		}
 	});
 
-	let citation = $state<CitationData>({
+	const blankCitation = (): CitationData => ({
 		authorType: 'individual',
 		organizationName: '',
 		organizationQualifications: '',
@@ -135,13 +155,24 @@
 		pageNumber: ''
 	});
 
+	let citation = $state<CitationData>(initialState?.citation ?? initialCitation ?? blankCitation());
+	const missingCitationFields = $derived(
+		[
+			(citation.authorType === 'organization'
+				? !citation.organizationName
+				: !citation.authors.some((author) => author.firstName || author.lastName)) && 'author',
+			!citation.date && 'date',
+			!citation.articleTitle && 'title'
+		].filter(Boolean) as string[]
+	);
+
 	// Watch for code changes and save to localStorage
 	$effect(() => {
 		saveCode(citation.code);
 	});
 
 	let textSegments = $state<TextSegment[]>([]);
-	let highlights = $state<PositionHighlight[]>([]); // Position-based highlights that transform through edits
+	let highlights = $state<PositionHighlight[]>(initialState?.highlights ?? []); // Position-based highlights that transform through edits
 	let selectedText = $state('');
 	let selectionStart = $state(0);
 	let selectionEnd = $state(0);
@@ -314,6 +345,28 @@
 		textSegments = result;
 	}
 
+	rebuildSegments();
+
+	$effect(() => {
+		const state: CardDraftState = {
+			citation: $state.snapshot(citation),
+			sourceText,
+			highlights: $state.snapshot(highlights),
+			tag,
+			error: extractionError || undefined
+		};
+		untrack(() => onStateChange?.(state));
+	});
+
+	onMount(() => {
+		previousText = sourceText;
+		void highlightConfig.init();
+		if (autoExtract && url && extractMetadata && !autoExtractionStarted) {
+			autoExtractionStarted = true;
+			void handleUrlBlur();
+		}
+	});
+
 	/**
 	 * Handle text input events and transform all highlight positions.
 	 *
@@ -393,84 +446,60 @@
 		citation.isOrganization = !citation.isOrganization;
 	}
 
+	function blankAuthor(): Author {
+		return { firstName: '', lastName: '', qualifications: '', qualificationsBold: [] };
+	}
+
+	function authorsFromMetadata(metadata: ExtractedMetadata): Author[] {
+		if (metadata.creators?.length) {
+			return metadata.creators.map((creator) => ({
+				firstName: creator.firstName || '',
+				lastName: creator.lastName || creator.name || '',
+				qualifications: metadata.qualifications || '',
+				qualificationsBold: []
+			}));
+		}
+		if (metadata.author) {
+			return metadata.author
+				.split(';')
+				.map((name) => name.trim())
+				.filter(Boolean)
+				.map((name) => ({ ...blankAuthor(), lastName: name, qualifications: metadata.qualifications || '' }));
+		}
+		return [blankAuthor()];
+	}
+
 	async function handleUrlBlur() {
-		if (!url || url === citation.url || !extractMetadata) return;
+		if (!url || !extractMetadata || isExtracting) return;
+		const requestedUrl = url;
 
 		isExtracting = true;
-		citation.url = url;
-		metadataWasAIExtracted = false;
 		extractionError = null;
-
 		try {
-			const metadata = await extractMetadata(url, manualHtml || undefined);
+			const metadata = await extractMetadata(requestedUrl);
+			const creators = metadata.creators || [];
+			const corporate = creators.length === 1 &&
+				(Boolean(creators[0].name) || creators[0].fieldMode === 1) &&
+				!creators[0].firstName;
 
-			if (metadata.title) {
-				citation.articleTitle = metadata.title;
-			}
-
-			if (metadata.author) {
-				// Split by semicolons to handle multiple authors
-				const authorStrings = metadata.author
-					.split(';')
-					.map((a) => a.trim())
-					.filter((a) => a);
-				const newAuthors: Author[] = [];
-
-				for (const authorString of authorStrings) {
-					// Try to split name
-					const nameParts = authorString.trim().split(' ');
-					const author: Author = {
-						firstName: '',
-						lastName: '',
-						qualifications: metadata.qualifications || '',
-						qualificationsBold: []
-					};
-
-					if (nameParts.length >= 2) {
-						author.firstName = nameParts.slice(0, -1).join(' ');
-						author.lastName = nameParts[nameParts.length - 1];
-					} else {
-						author.firstName = authorString;
-					}
-
-					newAuthors.push(author);
-				}
-
-				if (newAuthors.length > 0) {
-					citation.authors = newAuthors;
-				}
-			}
-
-			if (metadata.publisher) {
-				citation.source = metadata.publisher;
-			}
-
-			if (metadata.date) {
-				citation.date = metadata.date;
-			}
-
-			// Show warning if AI was used
-			if (metadata.aiExtracted) {
-				metadataWasAIExtracted = true;
-				toast.warning('Metadata extracted using AI - please verify accuracy', {
-					duration: 5000,
-					description:
-						'Author information was extracted using AI since it could not be found automatically.'
-				});
+			citation.articleTitle = metadata.title || '';
+			citation.source = metadata.publisher || '';
+			citation.date = metadata.date || '';
+			citation.url = requestedUrl;
+			citation.organizationQualifications = '';
+			citation.organizationQualificationsBold = [];
+			if (corporate) {
+				citation.authorType = 'organization';
+				citation.organizationName = creators[0].name || creators[0].lastName || '';
+				citation.authors = [blankAuthor()];
+			} else {
+				citation.authorType = 'individual';
+				citation.organizationName = '';
+				citation.authors = authorsFromMetadata(metadata);
 			}
 		} catch (error) {
 			console.error('Error extracting metadata:', error);
 			extractionError = error instanceof Error ? error.message : 'Failed to extract metadata';
-
-			// If extraction failed and we haven't shown manual HTML input yet, offer it
-			if (!manualHtml && !showManualHtmlInput) {
-				showManualHtmlInput = true;
-				toast.error('Extraction failed. Please provide HTML manually.', {
-					duration: 5000
-				});
-			} else {
-				toast.error('Failed to extract metadata from URL');
-			}
 		} finally {
 			isExtracting = false;
 		}
@@ -607,14 +636,24 @@
 
 	// Use the imported generateCardHtml from utils/citation
 	async function handleCopy() {
-		const html = generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels);
-		const success = await copyRichText(html);
-		copySuccess = success;
+		const html = generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels, tag);
+		const result = await copyRichText(html);
+		copySuccess = result === 'rich';
+		copyFallback = '';
 
-		if (success) {
+		if (result === 'rich') {
 			setTimeout(() => {
 				copySuccess = false;
 			}, 2000);
+		} else if (result === 'plain') {
+			const range = document.createRange();
+			if (preview) range.selectNodeContents(preview);
+			const selection = window.getSelection();
+			selection?.removeAllRanges();
+			selection?.addRange(range);
+			copyFallback = 'Rich-text clipboard access was blocked. The preview is selected; press Ctrl+C or ⌘C to copy formatting.';
+		} else {
+			copyFallback = 'Could not access the clipboard. Select the preview and press Ctrl+C or ⌘C to copy formatting.';
 		}
 	}
 </script>
@@ -623,7 +662,7 @@
 	<h2 class="mb-4 text-xl font-bold">Source Information</h2>
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 		<div class="mb-4" data-intro="url-input">
-			<label class="mb-1 block font-semibold">
+			<label for="article-url" class="mb-1 block font-semibold">
 				Article URL
 				{#if isExtracting}
 					<span class="text-sm font-normal text-gray-500">(Extracting metadata...)</span>
@@ -631,6 +670,7 @@
 			</label>
 			<div class="flex gap-2">
 				<input
+					id="article-url"
 					type="url"
 					bind:value={url}
 					placeholder="https://example.com/article"
@@ -645,56 +685,12 @@
 					{isExtracting ? 'Extracting...' : 'Extract'}
 				</button>
 			</div>
-			{#if extractionError}
-				<p class="mt-2 text-sm text-red-600">{extractionError}</p>
-			{/if}
+				{#if extractionError}
+					<p class="mt-2 text-sm text-red-600" role="alert">{extractionError}</p>
+				{/if}
 		</div>
 
-		{#if showManualHtmlInput}
-			<div class="mb-4">
-				<div class="mb-2 flex items-center justify-between">
-					<label class="block font-semibold">Manual HTML Input (Optional)</label>
-					<button
-						onclick={() => {
-							showManualHtmlInput = false;
-							manualHtml = '';
-						}}
-						class="text-sm text-gray-600 hover:text-gray-800"
-						type="button"
-					>
-						Hide
-					</button>
-				</div>
-				<p class="mb-2 text-sm text-gray-600">
-					If automatic extraction fails, paste the page's HTML here and try extracting again.
-				</p>
-				<textarea
-					bind:value={manualHtml}
-					placeholder="Paste the HTML source code here..."
-					class="h-32 w-full rounded border border-gray-300 px-3 py-2 font-mono text-xs"
-				></textarea>
-				{#if manualHtml}
-					<button
-						onclick={handleUrlBlur}
-						class="mt-2 rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-						type="button"
-					>
-						Retry Extraction with Manual HTML
-					</button>
-				{/if}
-			</div>
-		{:else}
-			<div class="mb-4">
-				<button
-					onclick={() => (showManualHtmlInput = true)}
-					class="text-sm text-blue-600 hover:text-blue-800"
-					type="button"
-				>
-					+ Provide HTML manually
-				</button>
-			</div>
-		{/if}
-
+		<fieldset disabled={isExtracting}>
 		<div class="mb-4">
 			<div class="mb-4 flex items-center gap-4">
 				<span class="font-semibold">Author Type:</span>
@@ -736,10 +732,11 @@
 			{#if citation.authorType === 'organization'}
 				<div class="space-y-4">
 					<div>
-						<label class="mb-1 block font-semibold"
+						<label for="organization-name" class="mb-1 block font-semibold"
 							>Organization Name<span class="text-red-500">*</span></label
 						>
 						<input
+							id="organization-name"
 							type="text"
 							bind:value={citation.organizationName}
 							placeholder="RAND Corporation"
@@ -747,8 +744,9 @@
 						/>
 					</div>
 					<div>
-						<label class="mb-1 block font-semibold">Qualifications</label>
+						<label for="organization-qualifications" class="mb-1 block font-semibold">Qualifications</label>
 						<QualificationInput
+							id="organization-qualifications"
 							bind:value={citation.organizationQualifications}
 							bind:boldArray={citation.organizationQualificationsBold}
 							placeholder="Nonprofit global policy think tank"
@@ -758,25 +756,15 @@
 			{:else if citation.authorType === 'etal'}
 				<div class="space-y-4">
 					<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-						<h3 class="mb-4 font-semibold">
-							First Author
-							{#if metadataWasAIExtracted}
-								<span
-									class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
-									title="Extracted using AI"
-								>
-									<Sparkles size={12} />
-									AI
-								</span>
-							{/if}
-						</h3>
+						<h3 class="mb-4 font-semibold">First Author</h3>
 
 						<div class="grid gap-4 md:grid-cols-2">
 							<div>
-								<label class="mb-1 block font-semibold">
+									<label for="author-first-0" class="mb-1 block font-semibold">
 									First Name<span class="text-red-500">*</span>
 								</label>
 								<input
+									id="author-first-0"
 									type="text"
 									bind:value={citation.authors[0].firstName}
 									placeholder="Michael"
@@ -785,8 +773,9 @@
 							</div>
 
 							<div>
-								<label class="mb-1 block font-semibold">Last Name</label>
+									<label for="author-last-0" class="mb-1 block font-semibold">Last Name</label>
 								<input
+									id="author-last-0"
 									type="text"
 									bind:value={citation.authors[0].lastName}
 									placeholder="Mazarr"
@@ -796,8 +785,9 @@
 						</div>
 
 						<div class="mt-4">
-							<label class="mb-1 block font-semibold">Qualifications</label>
-							<QualificationInput
+									<label for="author-qualifications-0" class="mb-1 block font-semibold">Qualifications</label>
+									<QualificationInput
+										id="author-qualifications-0"
 								bind:value={citation.authors[0].qualifications}
 								bind:boldArray={citation.authors[0].qualificationsBold}
 								placeholder="Senior Political Scientist at the RAND Corporation"
@@ -812,15 +802,6 @@
 							<div class="mb-2 flex items-center justify-between">
 								<h3 class="font-semibold">
 									Author {index + 1}
-									{#if metadataWasAIExtracted && index === 0}
-										<span
-											class="ml-2 inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-xs font-normal text-purple-700"
-											title="Extracted using AI"
-										>
-											<Sparkles size={12} />
-											AI
-										</span>
-									{/if}
 								</h3>
 								{#if citation.authors.length > 1}
 									<button
@@ -836,10 +817,11 @@
 
 							<div class="grid gap-4 md:grid-cols-2">
 								<div>
-									<label class="mb-1 block font-semibold">
+									<label for={`author-first-${index}`} class="mb-1 block font-semibold">
 										First Name{#if index === 0}<span class="text-red-500">*</span>{/if}
 									</label>
 									<input
+										id={`author-first-${index}`}
 										type="text"
 										bind:value={author.firstName}
 										placeholder="Michael"
@@ -848,8 +830,9 @@
 								</div>
 
 								<div>
-									<label class="mb-1 block font-semibold">Last Name</label>
+									<label for={`author-last-${index}`} class="mb-1 block font-semibold">Last Name</label>
 									<input
+										id={`author-last-${index}`}
 										type="text"
 										bind:value={author.lastName}
 										placeholder="Mazarr"
@@ -859,8 +842,9 @@
 							</div>
 
 							<div class="mt-4">
-								<label class="mb-1 block font-semibold">Qualifications</label>
+								<label for={`author-qualifications-${index}`} class="mb-1 block font-semibold">Qualifications</label>
 								<QualificationInput
+									id={`author-qualifications-${index}`}
 									bind:value={author.qualifications}
 									bind:boldArray={author.qualificationsBold}
 									placeholder="Senior Political Scientist at the RAND Corporation"
@@ -883,18 +867,20 @@
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<div>
-				<label class="mb-1 block font-semibold">Date</label>
+				<label for="date" class="mb-1 block font-semibold">Date</label>
 				<input
+					id="date"
 					type="text"
 					bind:value={citation.date}
-					placeholder="March 2022"
+					placeholder="11/9/22"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>
 
 			<div>
-				<label class="mb-1 block font-semibold">Date of Access</label>
+				<label for="date-of-access" class="mb-1 block font-semibold">Date of Access</label>
 				<input
+					id="date-of-access"
 					type="text"
 					bind:value={citation.dateOfAccess}
 					placeholder="11/9/22"
@@ -903,8 +889,9 @@
 			</div>
 
 			<div>
-				<label class="mb-1 block font-semibold">Page Number</label>
+				<label for="page-number" class="mb-1 block font-semibold">Page Number</label>
 				<input
+					id="page-number"
 					type="text"
 					bind:value={citation.pageNumber}
 					placeholder="5"
@@ -913,8 +900,9 @@
 			</div>
 
 			<div class="md:col-span-2">
-				<label class="mb-1 block font-semibold">Article Title</label>
+				<label for="article-title" class="mb-1 block font-semibold">Article Title</label>
 				<input
+					id="article-title"
 					type="text"
 					bind:value={citation.articleTitle}
 					placeholder="Understanding Competition: Great Power Rivalry..."
@@ -923,8 +911,9 @@
 			</div>
 
 			<div>
-				<label class="mb-1 block font-semibold">Source/Publisher</label>
+				<label for="source-publisher" class="mb-1 block font-semibold">Source/Publisher</label>
 				<input
+					id="source-publisher"
 					type="text"
 					bind:value={citation.source}
 					placeholder="RAND Corporation"
@@ -933,21 +922,35 @@
 			</div>
 
 			<div>
-				<label class="mb-1 block font-semibold">Your Code</label>
+				<label for="your-code" class="mb-1 block font-semibold">Your Code</label>
 				<input
+					id="your-code"
 					type="text"
 					bind:value={citation.code}
 					placeholder="VCHS CL"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>
+
+			<div>
+				<label for="card-tag" class="mb-1 block font-semibold">Tag</label>
+				<input
+					id="card-tag"
+					type="text"
+					bind:value={tag}
+					placeholder="What does this evidence prove?"
+					class="w-full rounded border border-gray-300 px-3 py-2"
+				/>
+			</div>
 		</div>
+		</fieldset>
 	</div>
 
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 		<h2 class="mb-4 text-xl font-bold">Evidence Text<span class="text-red-500">*</span></h2>
 
 		<textarea
+			id="source-text"
 			data-intro="evidence-text"
 			bind:value={sourceText}
 			onmouseup={handleTextSelection}
@@ -1004,17 +1007,18 @@
 			<button
 				onclick={handleCopy}
 				class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
-				disabled={!sourceText ||
-					(citation.authorType === 'organization'
-						? !citation.organizationName
-						: !citation.authors[0]?.firstName)}
+				disabled={!sourceText}
 			>
 				{copySuccess ? 'Copied!' : 'Copy to Clipboard'}
 			</button>
 		</div>
+		{#if missingCitationFields.length}
+			<p class="mb-3 text-sm text-amber-700">Missing {missingCitationFields.join(', ')}. The preview keeps placeholders for review.</p>
+		{/if}
 
-		<div class="rounded border border-gray-200 bg-gray-50 p-4">
-			{@html generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels)}
-		</div>
+			<div bind:this={preview} class="rounded border border-gray-200 bg-gray-50 p-4" tabindex="-1">
+				{@html generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels, tag)}
+			</div>
+			{#if copyFallback}<p class="mt-2 text-sm text-red-600" role="status">{copyFallback}</p>{/if}
 	</div>
 </div>
