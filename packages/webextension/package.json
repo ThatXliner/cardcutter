@@ -21,7 +21,7 @@
   "dependencies": {
 	"@acme/shared": "workspace:*",
 	"lucide-svelte": "^0.545.0",
-    "ztractor": "file:../../../ztractor/packages/core"
+    "ztractor": "2.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.17",

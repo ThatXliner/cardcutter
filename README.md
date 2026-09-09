@@ -24,7 +24,8 @@ browser extension is recommended for capturing citations from the page you are
 reading. Its deployed build uses the separately published legacy `ztractor`
 package, can fetch page HTML over the network, and optionally supports
 bring-your-own-key (BYOK) AI metadata extraction. The extension uses its pinned
-local extractor and does not use AI or make background requests to publishers.
+`ztractor@2.0.0` npm package and does not use AI or make background requests to
+publishers.
 
 Run the web editor locally with:
 
@@ -36,9 +37,9 @@ pnpm --filter @acme/old-frontend build
 
 ## Privacy and limits
 
-The extension uses the local [Ztractor](https://github.com/ThatXliner/ztractor)
-checkout's pinned Zotero translation runtime and bundled web translators. It
-does not use AI or make background
+The extension uses the pinned [`ztractor@2.0.0`](https://www.npmjs.com/package/ztractor)
+npm package's Zotero translation runtime and bundled web translators; the
+version is recorded in `pnpm-lock.yaml`. It does not use AI or make background
 requests to publishers. A toolbar capture reads the active `http` or `https`
 page and stores its HTML, text, and optional selection in browser session
 storage. Card drafts are saved in browser local storage.
@@ -72,29 +73,18 @@ Mozilla signing. A release install needs no source checkout or build tools.
 
 ## Build from source
 
-Card Cutter consumes `../ztractor` as a local package. For the same toolchain
-used by CI, use Node v22.22.3, pnpm 11.9.0, and Bun 1.3.14.
+Card Cutter uses the pinned `ztractor@2.0.0` npm package recorded in
+`pnpm-lock.yaml`. For the same toolchain used by CI, use Node v22.22.3 and pnpm
+11.9.0.
 
-Clone both repositories beside one another, build Ztractor first, then build
-the extension:
+Clone Card Cutter, install its dependencies, then build the extension:
 
 ```sh
 git clone https://github.com/ThatXliner/cardcutter.git
-git clone --recurse-submodules https://github.com/ThatXliner/ztractor.git
-
-cd ztractor
-git submodule update --init --recursive
-bun install
-bun run build
-
-cd ../cardcutter
-pnpm install
+cd cardcutter
+pnpm install --frozen-lockfile
 pnpm extension:build
 ```
-
-After changing the sibling checkout, rebuild Ztractor and run `pnpm install`
-in Card Cutter again. CI checks out a pinned Ztractor revision and builds that
-checkout before installing the extension.
 
 ## Install a local build
 
