@@ -28,21 +28,14 @@ function qualificationsHtml(value: string, bold: boolean[]): string {
 	return currentBold ? `${html}</strong>` : html;
 }
 
-function publicationYear(date: string): string {
-	return date.match(/\b(?:18|19|20|21)\d{2}\b/)?.[0] || '';
-}
 
-function dateHtml(date: string): string {
-	if (!date) return ' <strong>[Date not found]</strong>';
-	const year = publicationYear(date);
-	if (!year) return ` ${escapedLines(date)}`;
-	const start = date.indexOf(year);
-	return ` ${escapedLines(date.slice(0, start))}<strong>${escapeHtml(year)}</strong>${escapedLines(date.slice(start + year.length))}`;
+export function publicationYear(date: string): string {
+	return date.match(/\b(?:18|19|20|21)\d{2}\b/)?.[0] || '';
 }
 
 function personHtml(firstName: string, lastName: string, year: string): string {
 	const name = lastName || firstName;
-	if (!name) return '<strong>[Author not found]</strong>';
+	if (!name) return `<strong>[Author not found]${year ? ` ${escapeHtml(year)}` : ''}</strong>`;
 	const boldName = year ? `${escapedLines(name)} ${escapeHtml(year)}` : escapedLines(name);
 	if (lastName && firstName) return `<strong>${boldName}</strong>, ${escapedLines(firstName)}`;
 	return `<strong>${boldName}</strong>`;
@@ -50,11 +43,11 @@ function personHtml(firstName: string, lastName: string, year: string): string {
 
 /** Generate citation HTML in the existing NSDA card layout. */
 export function generateCitationHtml(citation: CitationData): string {
-	const year = publicationYear(citation.date);
+	const year = publicationYear(citation.date) || '[Year not found]';
 	let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
 
 	if (citation.authorType === 'organization') {
-		html += `<strong>${escapedLines(citation.organizationName || '[Author not found]')}${year ? ` ${escapeHtml(year)}` : ''}</strong>`;
+		html += `<strong>${escapedLines(citation.organizationName || '[Author not found]')} ${escapeHtml(year)}</strong>`;
 		if (citation.organizationQualifications) {
 			html += ` (${qualificationsHtml(citation.organizationQualifications, citation.organizationQualificationsBold)})`;
 		}
@@ -77,12 +70,10 @@ export function generateCitationHtml(citation: CitationData): string {
 		});
 	}
 
-	html += dateHtml(citation.date);
 	html += ' [';
 	html += `<em>${escapedLines(citation.articleTitle || '[Title not found]')}</em>`;
 	if (citation.source) html += `; ${escapedLines(citation.source)}`;
 	if (citation.url) html += `; ${escapedLines(citation.url)}`;
-	if (citation.pageNumber) html += `; p. ${escapedLines(citation.pageNumber)}`;
 	if (citation.dateOfAccess) html += `; DOA ${escapedLines(citation.dateOfAccess)}`;
 	if (citation.code) html += ` //${escapedLines(citation.code)}`;
 	html += ']</p>';

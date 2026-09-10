@@ -26,7 +26,6 @@ export interface CitationData {
 	url: string;
 	dateOfAccess: string;
 	code: string;
-	pageNumber: string;
 }
 
 export interface HighlightLevel {

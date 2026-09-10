@@ -4,6 +4,7 @@
 	import { aiConfig } from '$lib/stores/aiConfig.svelte';
 	import { extractMetadata } from '$lib/utils/metadataExtractor';
 	import { copyRichText } from '$lib/utils/clipboard';
+	import { publicationYear } from '$lib/utils/citation';
 	import { toast } from 'svelte-sonner';
 	import { Sparkles, Plus, X } from 'lucide-svelte';
 	import QualificationInput from './QualificationInput.svelte';
@@ -74,8 +75,7 @@
 					day: '2-digit',
 					year: '2-digit'
 				}),
-			code: oldData.code || loadCode(),
-			pageNumber: oldData.pageNumber || ''
+			code: oldData.code || loadCode()
 		};
 	}
 
@@ -110,8 +110,12 @@
 			day: '2-digit',
 			year: '2-digit'
 		}),
-		code: loadCode(),
-		pageNumber: ''
+		code: loadCode()
+	});
+
+	$effect(() => {
+		const year = publicationYear(citation.date);
+		if (year && citation.date !== year) citation.date = year;
 	});
 
 	// Watch for code changes and save to localStorage
@@ -425,7 +429,7 @@
 			}
 
 			if (metadata.date) {
-				citation.date = metadata.date;
+				citation.date = publicationYear(metadata.date);
 			}
 
 			// Show success message with appropriate context
@@ -607,20 +611,15 @@
 			source,
 			url,
 			dateOfAccess,
-			code,
-			pageNumber
+			code
 		} = citation;
+		const year = publicationYear(date) || '[Year not found]';
 
 		let html = '<p style="margin: 0; font-family: Calibri, sans-serif; font-size: 13pt;">';
 
 		// Handle organization mode
 		if (authorType === 'organization') {
-			// If page number exists, include it in bold with organization name
-			if (pageNumber) {
-				html += `<strong>${organizationName} ${pageNumber}</strong>`;
-			} else {
-				html += `<strong>${organizationName}</strong>`;
-			}
+			html += `<strong>${organizationName} ${year}</strong>`;
 
 			// Qualifications with selective bolding
 			if (organizationQualifications) {
@@ -665,20 +664,17 @@
 			const { firstName, lastName, qualifications, qualificationsBold } = author;
 
 			// Name formatting for first author
-			if (lastName && pageNumber) {
-				html += `<strong>${lastName} ${pageNumber}</strong>`;
-				if (firstName) {
-					html += ` ${firstName}`;
-				}
-			} else if (lastName && firstName) {
-				html += `<strong>${lastName}</strong>, ${firstName}`;
+			if (lastName && firstName) {
+				html += `<strong>${lastName} ${year}</strong>, ${firstName}`;
+			} else if (lastName) {
+				html += `<strong>${lastName} ${year}</strong>`;
 			} else if (firstName) {
 				// Fallback: just firstName with first word bold
 				const firstNameParts = firstName.trim().split(' ');
 				const onlyFirstName = firstNameParts[0];
 				const restOfFirstName = firstNameParts.slice(1).join(' ');
 
-				html += `<strong>${onlyFirstName}</strong>`;
+				html += `<strong>${onlyFirstName} ${year}</strong>`;
 				if (restOfFirstName) {
 					html += ` ${restOfFirstName}`;
 				}
@@ -739,21 +735,17 @@
 				}
 
 				// Name formatting (same logic as before, but for each author)
-				if (lastName && pageNumber && i === 0) {
-					// Only apply page number logic to first author
-					html += `<strong>${lastName} ${pageNumber}</strong>`;
-					if (firstName) {
-						html += ` ${firstName}`;
-					}
-				} else if (lastName && firstName) {
-					html += `<strong>${lastName}</strong>, ${firstName}`;
+				if (lastName && firstName) {
+					html += `<strong>${lastName}${i === 0 ? ` ${year}` : ''}</strong>, ${firstName}`;
+				} else if (lastName) {
+					html += `<strong>${lastName}${i === 0 ? ` ${year}` : ''}</strong>`;
 				} else if (firstName) {
 					// Fallback: just firstName with first word bold
 					const firstNameParts = firstName.trim().split(' ');
 					const onlyFirstName = firstNameParts[0];
 					const restOfFirstName = firstNameParts.slice(1).join(' ');
 
-					html += `<strong>${onlyFirstName}</strong>`;
+					html += `<strong>${onlyFirstName}${i === 0 ? ` ${year}` : ''}</strong>`;
 					if (restOfFirstName) {
 						html += ` ${restOfFirstName}`;
 					}
@@ -808,20 +800,6 @@
 						html += ')';
 					}
 				}
-			}
-		}
-
-		// Date (only year is bold) - comes after all authors
-		if (date) {
-			// Try to extract year and bold only that
-			const yearMatch = date.match(/\b(\d{4})\b/);
-			if (yearMatch) {
-				const year = yearMatch[1];
-				const dateWithBoldYear = date.replace(year, `<strong>${year}</strong>`);
-				html += ` ${dateWithBoldYear}`;
-			} else {
-				// If no year found, just add the date as-is
-				html += ` ${date}`;
 			}
 		}
 
@@ -1182,11 +1160,11 @@
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<div>
-				<label class="mb-1 block font-semibold">Date</label>
+				<label class="mb-1 block font-semibold">Year</label>
 				<input
 					type="text"
 					bind:value={citation.date}
-					placeholder="March 2022"
+					placeholder="2022"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>
@@ -1197,16 +1175,6 @@
 					type="text"
 					bind:value={citation.dateOfAccess}
 					placeholder="11/9/22"
-					class="w-full rounded border border-gray-300 px-3 py-2"
-				/>
-			</div>
-
-			<div>
-				<label class="mb-1 block font-semibold">Page Number</label>
-				<input
-					type="text"
-					bind:value={citation.pageNumber}
-					placeholder="5"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>

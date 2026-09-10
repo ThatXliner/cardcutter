@@ -26,7 +26,7 @@ An automatic debate card cutting tool for NSDA debate that helps you format evid
 
 - **NSDA Citation Format**: Generates properly formatted citations like:
   ```
-  Michael J. Mazarr (Senior Political Scientist at the RAND Corporation); March 2022
+  Mazarr 2022, Michael J. (Senior Political Scientist at the RAND Corporation)
   [Understanding Competition: Great Power Rivalry in a Changing International Order — Concepts
   and Theories; RAND Corporation; https://www.rand.org/pubs/perspectives/PEA1404-1.html;
   DOA 11/9/22 //VCHS CL]

@@ -152,7 +152,7 @@ Return ONLY a valid JSON object with these fields (use empty string if not found
   "qualifications": "Author's credentials, job title, or organizational affiliation (e.g., 'Senior Political Scientist at the RAND Corporation')",
   "title": "Article title",
   "publisher": "Publisher/site name",
-  "date": "Publication date in format 'Month YYYY' (e.g., 'March 2022')"
+  "date": "Publication year in format 'YYYY' (e.g., '2022')"
 }`,
 			prompt: `Extract metadata from this article HTML:
 

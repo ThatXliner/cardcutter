@@ -15,7 +15,6 @@ function citation(overrides: Partial<CitationData> = {}): CitationData {
 		url: 'https://example.test/?q=<unsafe>',
 		dateOfAccess: '11/9/22',
 		code: 'CL',
-		pageNumber: '5',
 		...overrides
 	};
 }
@@ -29,7 +28,7 @@ describe('citation HTML', () => {
 		expect(html).toContain('Tag &lt;unsafe&gt;');
 	});
 
-	it('uses the publication year beside the first author and keeps additional authors', () => {
+	it('uses only the publication year beside the first author and keeps additional authors', () => {
 		const html = generateCitationHtml(citation({
 			authors: [
 				{ firstName: 'Ada', lastName: 'Lovelace', qualifications: '', qualificationsBold: [] },
@@ -38,7 +37,28 @@ describe('citation HTML', () => {
 		}));
 		expect(html).toContain('<strong>Lovelace 2022</strong>, Ada');
 		expect(html).toContain('<strong>Research Collective</strong>');
-		expect(html).toContain('; p. 5');
+		expect(html).not.toContain('November 9');
+		expect(html).not.toContain('p. 5');
+	});
+
+	it('ignores the page number kept by older saved citations', () => {
+		const legacyCitation = { ...citation(), pageNumber: '5' };
+		const html = generateCitationHtml(legacyCitation);
+		expect(html).not.toContain('p. 5');
+	});
+
+	it('puts the year beside organization, et al., and single-name authors', () => {
+		expect(generateCitationHtml(citation({
+			authorType: 'organization',
+			organizationName: 'Research Collective'
+		}))).toContain('<strong>Research Collective 2022</strong>');
+		expect(generateCitationHtml(citation({
+			authorType: 'etal',
+			authors: [{ firstName: '', lastName: 'Lovelace', qualifications: '', qualificationsBold: [] }]
+		}))).toContain('<strong>Lovelace 2022</strong> <em>et al.</em>');
+		expect(generateCitationHtml(citation({
+			authors: [{ firstName: 'Ada', lastName: '', qualifications: '', qualificationsBold: [] }]
+		}))).toContain('<strong>Ada 2022</strong>');
 	});
 
 	it('retains selective qualification bolding and explicit missing placeholders', () => {
@@ -48,7 +68,7 @@ describe('citation HTML', () => {
 			articleTitle: ''
 		}));
 		expect(html).toContain('[Author not found]');
-		expect(html).toContain('[Date not found]');
+		expect(html).toContain('[Year not found]');
 		expect(html).toContain('[Title not found]');
 		expect(generateCitationHtml(citation())).toContain('(<strong>L</strong>ead &lt;Researcher&gt;)');
 	});

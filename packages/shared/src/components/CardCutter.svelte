@@ -10,7 +10,7 @@
 	} from '../types';
 	import { highlightConfig } from '../stores/highlightConfig.svelte';
 	import { copyRichText } from '../utils/clipboard';
-	import { generateCardHtml } from '../utils/citation';
+	import { generateCardHtml, publicationYear } from '../utils/citation';
 	import { Plus, X } from 'lucide-svelte';
 	import QualificationInput from './QualificationInput.svelte';
 
@@ -107,8 +107,7 @@
 					day: '2-digit',
 					year: '2-digit'
 				}),
-			code: oldData.code || loadCode(),
-			pageNumber: oldData.pageNumber || ''
+			code: oldData.code || loadCode()
 		};
 	}
 
@@ -151,17 +150,22 @@
 			day: '2-digit',
 			year: '2-digit'
 		}),
-		code: loadCode(),
-		pageNumber: ''
+		code: loadCode()
 	});
 
 	let citation = $state<CitationData>(initialState?.citation ?? initialCitation ?? blankCitation());
+
+	$effect(() => {
+		const year = publicationYear(citation.date);
+		if (year && citation.date !== year) citation.date = year;
+	});
+
 	const missingCitationFields = $derived(
 		[
 			(citation.authorType === 'organization'
 				? !citation.organizationName
 				: !citation.authors.some((author) => author.firstName || author.lastName)) && 'author',
-			!citation.date && 'date',
+			!publicationYear(citation.date) && 'year',
 			!citation.articleTitle && 'title'
 		].filter(Boolean) as string[]
 	);
@@ -484,7 +488,7 @@
 
 			citation.articleTitle = metadata.title || '';
 			citation.source = metadata.publisher || '';
-			citation.date = metadata.date || '';
+			citation.date = publicationYear(metadata.date || '');
 			citation.url = requestedUrl;
 			citation.organizationQualifications = '';
 			citation.organizationQualificationsBold = [];
@@ -867,12 +871,12 @@
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<div>
-				<label for="date" class="mb-1 block font-semibold">Date</label>
+				<label for="date" class="mb-1 block font-semibold">Year</label>
 				<input
 					id="date"
 					type="text"
 					bind:value={citation.date}
-					placeholder="11/9/22"
+					placeholder="2022"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>
@@ -884,17 +888,6 @@
 					type="text"
 					bind:value={citation.dateOfAccess}
 					placeholder="11/9/22"
-					class="w-full rounded border border-gray-300 px-3 py-2"
-				/>
-			</div>
-
-			<div>
-				<label for="page-number" class="mb-1 block font-semibold">Page Number</label>
-				<input
-					id="page-number"
-					type="text"
-					bind:value={citation.pageNumber}
-					placeholder="5"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
 			</div>

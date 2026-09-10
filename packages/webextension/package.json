@@ -2,7 +2,7 @@
   "name": "@acme/extension",
   "description": "NSDA Debate Card Cutter - Browser Extension",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",

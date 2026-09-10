@@ -55,8 +55,7 @@
 		source: '',
 		url: page?.url || '',
 		dateOfAccess: page ? new Date(page.capturedAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US'),
-		code: '',
-		pageNumber: ''
+		code: ''
 	});
 
 	function initialState(page?: Capture): CardDraftState {

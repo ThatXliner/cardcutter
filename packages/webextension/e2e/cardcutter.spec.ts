@@ -391,7 +391,9 @@ test("captures a selected article, extracts local metadata, formats and persists
 		await expect(editor.locator("#author-last-0")).toHaveValue("Doe");
 		await expect(editor.locator("#author-first-1")).toHaveValue("Sam");
 		await expect(editor.locator("#author-last-1")).toHaveValue("Smith");
-		await expect(editor.locator("#date")).toHaveValue(/2024/);
+		await expect(editor.locator("#date")).toHaveValue("2024");
+		await expect(editor.getByText("Page Number", { exact: true })).toHaveCount(0);
+		await expect(editor.locator("[data-intro=preview]")).not.toContainText("2024-02-03");
 		await expect(editor.locator("#article-title")).toHaveValue("Reliable evidence");
 		await expect(editor.locator("#source-publisher")).toHaveValue("Evidence Review");
 		await expect(requests).toHaveLength(requestCountBeforeCapture);
@@ -439,6 +441,9 @@ test("captures a selected article, extracts local metadata, formats and persists
 		});
 		expect(clipboard.plain).toContain("Reliable sourcing protects arguments.");
 		expect(clipboard.plain).toContain(editedPassage);
+		expect(clipboard.plain).toContain("Doe 2024");
+		expect(clipboard.plain).not.toContain("2024-02-03");
+		expect(clipboard.plain).not.toContain("; p. ");
 		expect(clipboard.html).toMatch(/font-weight:\s*bold/);
 		expect(clipboard.html).toMatch(/text-decoration:\s*underline/);
 		expect(clipboard.html).toContain(selectedPassage);
@@ -480,7 +485,7 @@ test("keeps missing metadata blank and captures the whole article when no passag
 		await expect(editor.locator("#author-first-0")).toHaveValue("");
 		await expect(editor.locator("#author-last-0")).toHaveValue("");
 		await expect(editor.locator("#date")).toHaveValue("");
-		await expect(editor.locator("[data-intro=preview]")).toContainText("Missing author, date");
+		await expect(editor.locator("[data-intro=preview]")).toContainText("Missing author, year");
 	} finally {
 		await closeExtension(context, profile);
 	}
@@ -518,7 +523,9 @@ test("uses embedded metadata from an offline ScienceDirect snapshot without supp
 		await expect(editor.locator("#author-first-1")).toBeVisible();
 		await expect(editor.locator("#author-first-0")).toHaveValue("Jane");
 		await expect(editor.locator("#author-last-1")).toHaveValue("Smith");
-		await expect(editor.locator("#date")).toHaveValue(/2024/);
+		await expect(editor.locator("#date")).toHaveValue("2024");
+		await expect(editor.getByText("Page Number", { exact: true })).toHaveCount(0);
+		await expect(editor.locator("[data-intro=preview]")).not.toContainText("2024-02-03");
 		await expect(editor.locator("#article-title")).toHaveValue("Reliable evidence");
 		await expect(editor.locator("#source-publisher")).toHaveValue("Evidence Review");
 		expect(httpRequests).toEqual([scienceDirectUrl]);
