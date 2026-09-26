@@ -5,6 +5,7 @@
 	import CardCutter from '@acme/shared/components/CardCutter.svelte';
 	import HighlightConfig from '@acme/shared/components/HighlightConfig.svelte';
 	import type { CardDraftState, CitationData, ExtractedMetadata } from '@acme/shared/types';
+	import { loadCardPreferences } from '@acme/shared/utils/cardPreferences';
 	import { editorUrl, loadCapture, type Capture } from '../../lib/capture';
 	import { extractCapture } from '../../lib/extraction';
 
@@ -55,7 +56,7 @@
 		source: '',
 		url: page?.url || '',
 		dateOfAccess: page ? new Date(page.capturedAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US'),
-		code: ''
+		code: loadCardPreferences().code
 	});
 
 	function initialState(page?: Capture): CardDraftState {
@@ -63,7 +64,7 @@
 			citation: blankCitation(page),
 			sourceText: page?.selection || page?.text || '',
 			highlights: [],
-			tag: '',
+			tag: loadCardPreferences().tag,
 			error: page?.error || initialError || undefined
 		};
 	}

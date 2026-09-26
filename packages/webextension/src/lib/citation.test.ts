@@ -28,6 +28,19 @@ describe('citation HTML', () => {
 		expect(html).toContain('Tag &lt;unsafe&gt;');
 	});
 
+	it('collapses evidence line breaks without changing highlights or citation fields', () => {
+		const segments = [
+			{ text: 'First\r\n', highlightLevel: 1 },
+			{ text: 'Second\nThird <safe>', highlightLevel: null }
+		];
+		const html = generateCardHtml(citation({ source: 'Journal\nName' }), 'First\r\nSecond\nThird <safe>', segments, [
+			{ id: 1, name: 'Bold', bold: true, underline: false, fontSize: 100 }
+		], 'Tag', true);
+		expect(html).toContain('Journal<br>Name');
+		expect(html).toContain('font-weight: bold;">First </span>Second Third &lt;safe&gt;');
+		expect(html).not.toContain('First<br>');
+	});
+
 	it('uses only the publication year beside the first author and keeps additional authors', () => {
 		const html = generateCitationHtml(citation({
 			authors: [

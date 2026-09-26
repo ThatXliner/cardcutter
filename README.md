@@ -41,8 +41,12 @@ The extension uses the pinned [`ztractor@2.0.0`](https://www.npmjs.com/package/z
 npm package's Zotero translation runtime and bundled web translators; the
 version is recorded in `pnpm-lock.yaml`. It does not use AI or make background
 requests to publishers. A toolbar capture reads the active `http` or `https`
-page and stores its HTML, text, and optional selection in browser session
-storage. Card drafts are saved in browser local storage.
+page and keeps its HTML, text, and optional selection in extension IndexedDB
+for the popup-to-editor handoff. The ten newest page captures are retained.
+Card drafts are saved in browser local storage.
+The last entered code and tag, plus the evidence line-break setting, are saved
+as defaults for new cards. Collapsing line breaks changes the preview and copy
+output; the editable evidence text keeps its original line breaks.
 
 Metadata extraction runs against the captured HTML with `network: 'deny'`, so
 Ztractor blocks translator follow-up requests. Metadata is an autofill aid, not

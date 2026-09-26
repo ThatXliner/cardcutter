@@ -86,7 +86,8 @@ export function generateCardHtml(
 	sourceText: string,
 	textSegments: TextSegment[],
 	highlightLevels: HighlightLevel[],
-	tag = ''
+	tag = '',
+	collapseNewlines = false
 ): string {
 	let html = tag.trim()
 		? `<p style="margin: 0 0 8px; font-family: Calibri, sans-serif; font-size: 13pt; font-weight: bold;">${escapedLines(tag)}</p>`
@@ -96,9 +97,12 @@ export function generateCardHtml(
 
 	const segments = textSegments.length ? textSegments : [{ text: sourceText, highlightLevel: null }];
 	for (const segment of segments) {
+		const evidence = collapseNewlines
+			? escapeHtml(segment.text.replace(/[\r\n]+/g, ' '))
+			: escapedLines(segment.text);
 		const level = highlightLevels.find((item) => item.id === segment.highlightLevel);
 		if (!level) {
-			html += escapedLines(segment.text);
+			html += evidence;
 			continue;
 		}
 		let style = 'font-family: Calibri, sans-serif; font-size: 8pt;';
@@ -107,7 +111,7 @@ export function generateCardHtml(
 		if (level.fontSize !== 100) style += ` font-size: ${(8 * level.fontSize) / 100}pt;`;
 		if (level.color && level.color !== '#000000') style += ` color: ${escapeHtml(level.color)};`;
 		if (level.backgroundColor && level.backgroundColor !== '#ffffff') style += ` background-color: ${escapeHtml(level.backgroundColor)};`;
-		html += `<span style="${style}">${escapedLines(segment.text)}</span>`;
+		html += `<span style="${style}">${evidence}</span>`;
 	}
 
 	return `${html}</p>`;

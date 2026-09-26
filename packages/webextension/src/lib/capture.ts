@@ -1,5 +1,5 @@
 /**
- * A page snapshot kept in session storage while the editor is open.
+ * A page snapshot kept in IndexedDB while the editor is open.
  *
  * The snapshot is deliberately made in an isolated-world executeScript call.
  * Nothing from the page is executed as extension code and no content script is
@@ -36,13 +36,11 @@ export const MAX_TEXT_BYTES = 1 * 1024 * 1024;
 export const MAX_SELECTION_BYTES = 1 * 1024 * 1024;
 export const MAX_STORED_CAPTURES = 10;
 /**
- * Chrome permits roughly 10 MiB in session storage. Keep captures under 8 MiB
- * after JSON encoding, leaving headroom for extension bookkeeping and other
- * session values.
+ * Bound the amount of page data passed between extension contexts.
  */
 export const MAX_CAPTURE_BYTES = 8 * 1024 * 1024;
-export const MAX_SESSION_STORAGE_BYTES = 8 * 1024 * 1024;
-export const CAPTURE_STORAGE_PREFIX = "capture:";
+const CAPTURE_DATABASE = "cardcutter-captures";
+const CAPTURE_STORE = "captures";
 export const CAPTURE_POPUP_MESSAGE = "cardcutter:capture-popup";
 
 export interface CapturePopupMessage {
@@ -212,56 +210,55 @@ function captureTimestamp(capture: Capture): number {
 	return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function captureBytes(key: string, capture: Capture): number {
-	return byteLength(JSON.stringify({ [key]: capture }));
-}
-
 export function createErrorCapture(tab: CaptureTab, id: string, error: unknown): Capture {
 	return errorCapture(tab, id, error);
 }
 
-/** Persist a capture and prune older captures from session storage. */
+function openCaptureDatabase(): Promise<IDBDatabase> {
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open(CAPTURE_DATABASE, 1);
+		request.onupgradeneeded = () => request.result.createObjectStore(CAPTURE_STORE, { keyPath: "id" });
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error);
+	});
+}
+
+/** Persist a capture for the popup/editor handoff without session-storage quotas. */
 export async function saveCapture(capture: Capture): Promise<void> {
-	const key = `${CAPTURE_STORAGE_PREFIX}${capture.id}`;
-	const stored = await browser.storage.session.get(null);
-	const captures = Object.entries(stored || {})
-		.filter(([storedKey, value]) => storedKey.startsWith(CAPTURE_STORAGE_PREFIX) && isStoredCapture(value))
-		.map(([storedKey, value]) => ({ key: storedKey, capture: value }));
-	const existing = captures.filter(({ key: storedKey }) => storedKey !== key);
-	const newCaptureBytes = captureBytes(key, capture);
-	if (newCaptureBytes > MAX_SESSION_STORAGE_BYTES) {
-		throw new Error("Capture exceeds the 8 MB session storage budget.");
+	const database = await openCaptureDatabase();
+	try {
+		await new Promise<void>((resolve, reject) => {
+			const transaction = database.transaction(CAPTURE_STORE, "readwrite");
+			const store = transaction.objectStore(CAPTURE_STORE);
+			store.put(capture);
+			const request = store.getAll();
+			request.onsuccess = () => {
+				const captures = (request.result as unknown[])
+					.filter(isStoredCapture)
+					.sort((left, right) => captureTimestamp(right) - captureTimestamp(left));
+				for (const old of captures.slice(MAX_STORED_CAPTURES)) store.delete(old.id);
+			};
+			transaction.oncomplete = () => resolve();
+			transaction.onerror = () => reject(transaction.error);
+			transaction.onabort = () => reject(transaction.error);
+		});
+	} finally {
+		database.close();
 	}
-
-	// Keep the newest captures that fit. Pruning before set avoids exceeding
-	// Chrome's session-storage quota while writing a new large page snapshot.
-	existing.sort((left, right) => captureTimestamp(right.capture) - captureTimestamp(left.capture));
-	const kept: typeof existing = [];
-	let totalBytes = newCaptureBytes;
-	for (const candidate of existing) {
-		if (
-			kept.length < MAX_STORED_CAPTURES - 1 &&
-			totalBytes + captureBytes(candidate.key, candidate.capture) <= MAX_SESSION_STORAGE_BYTES
-		) {
-			kept.push(candidate);
-			totalBytes += captureBytes(candidate.key, candidate.capture);
-		}
-	}
-
-	const keptKeys = new Set(kept.map(({ key: storedKey }) => storedKey));
-	const removeKeys = existing
-		.filter(({ key: storedKey }) => !keptKeys.has(storedKey))
-		.map(({ key: storedKey }) => storedKey);
-	if (removeKeys.length > 0) await browser.storage.session.remove(removeKeys);
-	await browser.storage.session.set({ [key]: capture });
 }
 
 export async function loadCapture(id: string): Promise<Capture | undefined> {
 	if (!id) return undefined;
-
-	const stored = await browser.storage.session.get(`${CAPTURE_STORAGE_PREFIX}${id}`);
-	const capture = stored?.[`${CAPTURE_STORAGE_PREFIX}${id}`];
-	return isStoredCapture(capture) ? capture : undefined;
+	const database = await openCaptureDatabase();
+	try {
+		return await new Promise<Capture | undefined>((resolve, reject) => {
+			const request = database.transaction(CAPTURE_STORE, "readonly").objectStore(CAPTURE_STORE).get(id);
+			request.onsuccess = () => resolve(isStoredCapture(request.result) ? request.result : undefined);
+			request.onerror = () => reject(request.error);
+		});
+	} finally {
+		database.close();
+	}
 }
 
 export function editorUrl(id: string, error?: string): string {

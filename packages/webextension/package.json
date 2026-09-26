@@ -2,7 +2,7 @@
   "name": "@acme/extension",
   "description": "NSDA Debate Card Cutter - Browser Extension",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -19,15 +19,16 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-	"@acme/shared": "workspace:*",
-	"lucide-svelte": "^0.545.0",
+    "@acme/shared": "workspace:*",
+    "lucide-svelte": "^0.545.0",
     "ztractor": "2.0.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.17",
     "@playwright/test": "1.63.0",
+    "@tailwindcss/vite": "^4.1.17",
     "@tsconfig/svelte": "^5.0.5",
     "@wxt-dev/module-svelte": "^2.0.3",
+    "fake-indexeddb": "^6.2.5",
     "svelte": "^5.38.6",
     "svelte-check": "^4.3.1",
     "tailwindcss": "^4.1.17",

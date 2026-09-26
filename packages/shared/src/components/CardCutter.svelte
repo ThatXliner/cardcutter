@@ -11,6 +11,7 @@
 	import { highlightConfig } from '../stores/highlightConfig.svelte';
 	import { copyRichText } from '../utils/clipboard';
 	import { generateCardHtml, publicationYear } from '../utils/citation';
+	import { loadCardPreferences, saveCodePreference, saveTagPreference, saveCollapseNewlinesPreference } from '../utils/cardPreferences';
 	import { Plus, X } from 'lucide-svelte';
 	import QualificationInput from './QualificationInput.svelte';
 
@@ -34,26 +35,11 @@
 		onStateChange
 	}: Props = $props();
 
-	const CODE_STORAGE_KEY = 'cardcutter_user_code';
-
 	// Expose extractFromUrl method for parent components
 	export async function extractFromUrl(newUrl: string) {
 		url = newUrl;
 		// Trigger extraction when explicitly called
 		await handleUrlBlur();
-	}
-
-	// Load code from localStorage
-	function loadCode(): string {
-		if (typeof window === 'undefined') return '';
-		const stored = localStorage.getItem(CODE_STORAGE_KEY);
-		return stored || '';
-	}
-
-	// Save code to localStorage
-	function saveCode(code: string) {
-		if (typeof window === 'undefined') return;
-		localStorage.setItem(CODE_STORAGE_KEY, code);
 	}
 
 	// Migration helper for old citation data
@@ -107,7 +93,7 @@
 					day: '2-digit',
 					year: '2-digit'
 				}),
-			code: oldData.code || loadCode()
+			code: oldData.code || loadCardPreferences().code
 		};
 	}
 
@@ -117,7 +103,8 @@
 	let copySuccess = $state(false);
 	let extractionError = $state<string | null>(initialState?.error || null);
 	let copyFallback = $state('');
-	let tag = $state(initialState?.tag ?? '');
+	let tag = $state(initialState?.tag ?? loadCardPreferences().tag);
+	let collapseNewlines = $state(loadCardPreferences().collapseNewlines);
 	let preview = $state<HTMLDivElement>();
 	let autoExtractionStarted = false;
 
@@ -150,7 +137,7 @@
 			day: '2-digit',
 			year: '2-digit'
 		}),
-		code: loadCode()
+		code: loadCardPreferences().code
 	});
 
 	let citation = $state<CitationData>(initialState?.citation ?? initialCitation ?? blankCitation());
@@ -169,11 +156,6 @@
 			!citation.articleTitle && 'title'
 		].filter(Boolean) as string[]
 	);
-
-	// Watch for code changes and save to localStorage
-	$effect(() => {
-		saveCode(citation.code);
-	});
 
 	let textSegments = $state<TextSegment[]>([]);
 	let highlights = $state<PositionHighlight[]>(initialState?.highlights ?? []); // Position-based highlights that transform through edits
@@ -640,7 +622,7 @@
 
 	// Use the imported generateCardHtml from utils/citation
 	async function handleCopy() {
-		const html = generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels, tag);
+		const html = generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels, tag, collapseNewlines);
 		const result = await copyRichText(html);
 		copySuccess = result === 'rich';
 		copyFallback = '';
@@ -920,6 +902,7 @@
 					id="your-code"
 					type="text"
 					bind:value={citation.code}
+					oninput={(event) => saveCodePreference(event.currentTarget.value)}
 					placeholder="VCHS CL"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
@@ -931,6 +914,7 @@
 					id="card-tag"
 					type="text"
 					bind:value={tag}
+					oninput={(event) => saveTagPreference(event.currentTarget.value)}
 					placeholder="What does this evidence prove?"
 					class="w-full rounded border border-gray-300 px-3 py-2"
 				/>
@@ -941,6 +925,10 @@
 
 	<div class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm">
 		<h2 class="mb-4 text-xl font-bold">Evidence Text<span class="text-red-500">*</span></h2>
+		<label class="mb-3 flex items-center gap-2 text-sm text-gray-700">
+			<input type="checkbox" bind:checked={collapseNewlines} onchange={(event) => saveCollapseNewlinesPreference(event.currentTarget.checked)} />
+			Collapse evidence line breaks in preview and copied card
+		</label>
 
 		<textarea
 			id="source-text"
@@ -1010,7 +998,7 @@
 		{/if}
 
 			<div bind:this={preview} class="rounded border border-gray-200 bg-gray-50 p-4" tabindex="-1">
-				{@html generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels, tag)}
+				{@html generateCardHtml(citation, sourceText, textSegments, highlightConfig.levels, tag, collapseNewlines)}
 			</div>
 			{#if copyFallback}<p class="mt-2 text-sm text-red-600" role="status">{copyFallback}</p>{/if}
 	</div>

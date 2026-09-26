@@ -491,6 +491,32 @@ test("keeps missing metadata blank and captures the whole article when no passag
 	}
 });
 
+test("remembers code, tag, and line-break preference for new cards", async () => {
+	const { context, profile, extensionId } = await openExtension();
+	try {
+		const articlePage = await context.newPage();
+		await articlePage.goto(`${baseUrl}/missing`);
+		const first = await triggerAction(articlePage, extensionId);
+		await first.locator("#your-code").fill("VCHS CL");
+		await first.locator("#card-tag").fill("Reliable source");
+		await first.getByRole("checkbox", { name: "Collapse evidence line breaks in preview and copied card" }).check();
+		expect(await first.locator("[data-intro=preview] p").last().innerHTML()).not.toContain("<br>");
+		await expect(first.locator("[data-intro=evidence-text]")).toHaveValue(fullArticleText);
+
+		await first.reload();
+		await expect(first.getByRole("checkbox", { name: "Collapse evidence line breaks in preview and copied card" })).toBeChecked();
+		await expect(first.locator("#your-code")).toHaveValue("VCHS CL");
+		await expect(first.locator("#card-tag")).toHaveValue("Reliable source");
+
+		const second = await triggerAction(articlePage, extensionId);
+		await expect(second.locator("#your-code")).toHaveValue("VCHS CL");
+		await expect(second.locator("#card-tag")).toHaveValue("Reliable source");
+		await expect(second.getByRole("checkbox", { name: "Collapse evidence line breaks in preview and copied card" })).toBeChecked();
+	} finally {
+		await closeExtension(context, profile);
+	}
+});
+
 test("uses embedded metadata from an offline ScienceDirect snapshot without supplementary requests", async () => {
 	const { context, profile, extensionId } = await openExtension();
 	const scienceDirectUrl = "https://www.sciencedirect.com/science/article/pii/S0000000000000000";
