@@ -77,6 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: firefox-review-source
+          include-hidden-files: true
           path: packages/webextension/.output/cardcutter-*-review-source.zip
           if-no-files-found: error
 
