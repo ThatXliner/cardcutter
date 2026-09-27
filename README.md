@@ -139,6 +139,9 @@ These archives are for local inspection or manual distribution.
 
 ## Version and release (maintainers)
 
+Store submission copy, images, privacy disclosures, and Firefox reviewer build
+instructions are in [STORE_SUBMISSION.md](STORE_SUBMISSION.md).
+
 The canonical extension version is in `packages/webextension/package.json`.
 Update it with one argument:
 

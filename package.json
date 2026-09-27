@@ -4,6 +4,7 @@
   "scripts": {
     "update": "node scripts/update-version.mjs",
     "test:release": "node --test scripts/update-version.test.mjs",
+    "store:review-source": "node scripts/package-review-source.mjs",
     "extension:build": "pnpm --filter @acme/extension build",
     "extension:check": "pnpm --filter @acme/extension check",
     "extension:test": "pnpm --filter @acme/extension test"

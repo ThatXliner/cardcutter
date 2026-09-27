@@ -1,8 +1,7 @@
-## What's new in v0.1.2
+## What's new in v0.1.3
 
-- Page captures use extension IndexedDB, avoiding the session-storage quota error on large articles.
-- The last entered code and tag are saved as defaults for new cards.
-- A saved option collapses evidence line breaks in the preview and copied card while preserving the editable source text.
+- A new, simpler Card Cutter logo appears in the toolbar, popup, and store packages.
+- The Chrome and Firefox packages retain the capture quota fix, saved code and tag defaults, and the evidence line-break option introduced in v0.1.2.
 
 ## Install
 

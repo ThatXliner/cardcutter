@@ -428,6 +428,15 @@ test("captures a selected article, extracts local metadata, formats and persists
 		await editor.locator("#card-tag").fill("Reliable sourcing protects arguments.");
 		await expect(editor.getByRole("status").first()).toHaveText("Saved on this device");
 		await editor.screenshot({ path: "test-results/editor.png", fullPage: true });
+		if (process.env.CAPTURE_STORE_ASSETS === "1") {
+			const assetDir = join(process.cwd(), "../../store-assets");
+			await mkdir(assetDir, { recursive: true });
+			await editor.setViewportSize({ width: 1280, height: 800 });
+            await editor.evaluate(() => window.scrollTo(0, 0));
+            await editor.screenshot({ path: join(assetDir, "chrome-screenshot-article.png"), animations: "disabled" });
+            await editor.locator("[data-intro=preview]").scrollIntoViewIfNeeded();
+            await editor.screenshot({ path: join(assetDir, "chrome-screenshot-card.png"), animations: "disabled" });
+		}
 
 		await editor.getByRole("button", { name: "Copy to Clipboard" }).click();
 		await expect(editor.getByRole("button", { name: "Copied!" })).toBeVisible();

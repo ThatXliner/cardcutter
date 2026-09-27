@@ -51,6 +51,8 @@ jobs:
         run: |
           pnpm --filter @acme/extension exec playwright install --with-deps chromium
           pnpm --filter @acme/extension test:e2e
+      - name: Package Firefox reviewer source
+        run: pnpm store:review-source
       - name: Upload browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
@@ -70,6 +72,12 @@ jobs:
           path: |
             packages/webextension/.output/cardcutter-*-chrome.zip
             packages/webextension/.output/cardcutter-*-firefox.zip
+          if-no-files-found: error
+      - name: Upload Firefox reviewer source
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-review-source
+          path: packages/webextension/.output/cardcutter-*-review-source.zip
           if-no-files-found: error
 
   web:
