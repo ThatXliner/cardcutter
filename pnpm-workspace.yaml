@@ -12,3 +12,8 @@ allowBuilds:
 # Allow the verified newly published extractor release through pnpm's age gate.
 minimumReleaseAgeExclude:
   - ztractor@2.0.0
+  - '@ai-sdk/provider-utils@3.0.42'
+
+overrides:
+  "@ai-sdk/provider-utils": "^3.0.42"
+  "undici": "^6.29.1"
