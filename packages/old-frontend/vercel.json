@@ -1,6 +1,6 @@
 {
-	"buildCommand": "npm run build",
-	"installCommand": "pnpm install --frozen-lockfile --filter @acme/old-frontend",
+	"buildCommand": "PATH=/tmp/cardcutter-secure-node/bin:$PATH npm run build",
+	"installCommand": "node ../../scripts/install-secure-node.mjs /tmp/cardcutter-secure-node && PATH=/tmp/cardcutter-secure-node/bin:$PATH pnpm install --frozen-lockfile --filter @acme/old-frontend",
 	"framework": "sveltekit",
 	"devCommand": "npm run dev",
 	"rewrites": [
