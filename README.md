@@ -11,6 +11,11 @@ A Chrome and Firefox extension: one click autofills the citation, highlight leve
   <img alt="No AI in the extension" src="https://img.shields.io/badge/AI-none-18363A">
 </p>
 
+<p align="center">
+  <a href="brag-output/brag.mp4"><img src="brag-output/brag.jpg" alt="Watch the 20-second Card Cutter video" width="720"></a>
+  <br><sub><a href="brag-output/brag.mp4">▶ Watch the 20-second video</a></sub>
+</p>
+
 Card Cutter turns the article you're reading into an NSDA-style debate evidence
 card. It runs as a Chrome and Firefox extension.
 
