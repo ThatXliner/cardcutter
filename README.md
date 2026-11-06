@@ -12,8 +12,8 @@ A Chrome and Firefox extension: one click autofills the citation, highlight leve
 </p>
 
 <p align="center">
-  <a href="brag-output/brag.mp4"><img src="brag-output/brag.jpg" alt="Watch the 20-second Card Cutter video" width="720"></a>
-  <br><sub><a href="brag-output/brag.mp4">▶ Watch the 20-second video</a></sub>
+  <a href="https://youtu.be/SNliCK63ZY8"><img src="brag-output/brag.jpg" alt="Watch the 20-second Card Cutter video" width="720"></a>
+  <br><sub><a href="https://youtu.be/SNliCK63ZY8">▶ Watch on YouTube</a></sub>
 </p>
 
 Card Cutter turns the article you're reading into an NSDA-style debate evidence
