@@ -1,4 +1,15 @@
-# Card Cutter
+<p align="center"><img src="packages/webextension/public/icon/cardcutter.svg" alt="Card Cutter icon" width="110"></p>
+
+<h1 align="center">Card Cutter</h1>
+
+<p align="center"><strong>Turn the article you're reading into an NSDA-style debate evidence card.</strong><br>
+A Chrome and Firefox extension: one click autofills the citation, highlight levels format the card, and it pastes straight into your doc.</p>
+
+<p align="center">
+  <a href="https://github.com/ThatXliner/cardcutter/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ThatXliner/cardcutter?color=18363A"></a>
+  <img alt="Chrome and Firefox" src="https://img.shields.io/badge/browsers-Chrome%20%7C%20Firefox-C9A879">
+  <img alt="No AI in the extension" src="https://img.shields.io/badge/AI-none-18363A">
+</p>
 
 Card Cutter turns the article you're reading into an NSDA-style debate evidence
 card. It runs as a Chrome and Firefox extension.
